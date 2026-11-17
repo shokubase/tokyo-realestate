@@ -242,7 +242,8 @@ def parse_detail(prop_code: str, spec: dict) -> dict:
             "mgmt_company": g("管理会社"),
             "mgmt_type": g("管理 / 勤務形態"),
             "school": school,
-            "facilities": items(g("建物設備・施設")) or None,
+            # 빈 목록이면 DB의 기존 값을 유지한다 (null 을 보내면 RPC가 실패)
+            "facilities": items(g("建物設備・施設")),
         },
     }
 
