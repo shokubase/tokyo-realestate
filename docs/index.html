@@ -75,6 +75,7 @@ main { max-width: 1280px; margin: 0 auto; padding: 0 16px 60px; }
 .card.gone { opacity: .6; }
 .thumb { aspect-ratio: 4/3; background: var(--chip); position: relative; overflow: hidden; }
 .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.thumb img.plan { object-fit: contain; background: #fff; }
 .badges { position: absolute; top: 8px; left: 8px; display: flex; gap: 5px; flex-wrap: wrap; }
 .badge { font-size: 11px; font-weight: 700; padding: 3px 7px; border-radius: 6px; background: rgba(20,20,20,.78); color: #fff; }
 .badge.new { background: var(--new); color: #fff; }
@@ -178,8 +179,10 @@ const LIST_COLS = [
   "total_units","floors_above","route_summary","is_new","is_price_changed","is_active",
   "first_seen","delisted_on","bldg_active_listings","bldg_total_listings","has_other_listing_in_bldg",
   "same_unit_listings","initial_price_man","price_changes","last_price_change_on","lat","lng",
-  "thumb:images->0->>url"
+  "layout_image","thumb:images->0->>url"
 ].join(",");
+// 실내 사진이 없는 매물이 절반쯤 된다 → 건물 외관 사진, 그것도 없으면 평면도로 대체
+const bldgPhoto = code => `/images/building/${code}/${code}_p1.jpg`;
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -311,8 +314,8 @@ function cardHTML(r) {
   ].join("");
   const sib = r.bldg_active_listings - (r.is_active ? 1 : 0);
   return `<button class="card ${r.is_active ? "" : "gone"}" data-id="${r.id}">
-    <div class="thumb">${r.thumb ? `<img loading="lazy" referrerpolicy="no-referrer" alt="" src="${esc(img(r.thumb))}">` : ""}
-      <div class="badges">${badges}</div></div>
+    <div class="thumb"><img loading="lazy" referrerpolicy="no-referrer" alt="" src="${esc(img(r.thumb || bldgPhoto(r.bldg_code)))}" data-fb="${esc(img(r.layout_image))}">
+      <div class="badges">${badges}${r.thumb ? "" : `<span class="badge">건물 사진</span>`}</div></div>
     <div class="cbody">
       <div class="cname">${esc(r.bldg_name)}</div>
       <div class="cmeta">${esc(where(r))} · ${esc(unitLine(r))}</div>
@@ -369,6 +372,7 @@ async function openDetail(id) {
   const pics = [];
   if (d.layout_image) pics.push({ url: d.layout_image, caption: "평면도", plan: true });
   for (const p of d.images || []) pics.push(p);
+  pics.push({ url: bldgPhoto(d.bldg_code), caption: "건물 외관" });
   const sibs = ALL.filter(r => r.bldg_code === d.bldg_code)
     .sort((a, b) => (b.is_active - a.is_active) || (Number(b.floor) - Number(a.floor)));
   const row = (k, v) => v == null || v === "" ? "" : `<tr><th>${k}</th><td>${v}</td></tr>`;
@@ -438,6 +442,15 @@ async function openDetail(id) {
     </table></div>
   </div>`;
 }
+
+// 사진 로드 실패 시: 대체 이미지(평면도)로 한 번 바꿔 보고, 그것도 실패하면 숨긴다
+document.addEventListener("error", e => {
+  const i = e.target;
+  if (!(i instanceof HTMLImageElement)) return;
+  const fb = i.dataset.fb;
+  if (fb && i.src !== fb) { delete i.dataset.fb; i.classList.add("plan"); i.src = fb; }
+  else (i.closest("figure") || i).style.display = "none";
+}, true);
 
 $("#grid").addEventListener("click", e => { const c = e.target.closest(".card"); if (c) openDetail(+c.dataset.id); });
 $("#dlg").addEventListener("click", e => {
