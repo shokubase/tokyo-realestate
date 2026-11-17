@@ -85,6 +85,8 @@ main { max-width: 1280px; margin: 0 auto; padding: 0 16px 60px; }
 }
 .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--card); }
 .chip small { opacity: .65; margin-left: 3px; }
+.ko { color: var(--muted); font-size: .92em; margin-left: 4px; font-weight: 400; }
+.chip[aria-pressed="true"] .ko { color: inherit; opacity: .85; }
 
 .bar { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 6px 2px 12px; flex-wrap: wrap; }
 .bar .count { font-weight: 600; }
@@ -156,6 +158,7 @@ footer { text-align: center; color: var(--muted); font-size: 12px; padding: 0 16
 <header class="top">
   <div class="hrow"><h1>도쿄 매물 트래커</h1><button id="theme" type="button"></button></div>
   <p id="status">불러오는 중…</p>
+  <p>금액은 모두 일본 엔(원화 아님)이고 판매자가 부른 호가입니다. 1억 엔 = 100,000,000엔 · 평당 = 1평(坪, 약 3.3㎡)당 가격</p>
   <nav class="tabs">
     <button type="button" data-tab="list" aria-selected="true">매물</button>
     <button type="button" data-tab="stats" aria-selected="false">시세 분석</button>
@@ -233,6 +236,45 @@ const LIST_COLS = [
 // 실내 사진이 없는 매물이 절반쯤 된다 → 건물 외관 사진, 그것도 없으면 평면도로 대체
 const bldgPhoto = code => `/images/building/${code}/${code}_p1.jpg`;
 
+// 일본어 지명 → 한글 표기. 세부 지역명은 "・"로 나눠 조각별로 찾는다.
+const KO = {
+  "港区":"미나토구","渋谷区":"시부야구","千代田区":"지요다구","新宿区":"신주쿠구","中央区":"주오구",
+  "目黒区":"메구로구","品川区":"시나가와구","世田谷区":"세타가야구","文京区":"분쿄구",
+  "三田":"미타","元赤坂":"모토아카사카","元麻布":"모토아자부","六本木":"롯폰기","北青山":"기타아오야마",
+  "南青山":"미나미아오야마","南麻布":"미나미아자부","台場":"다이바","愛宕":"아타고","新橋":"신바시",
+  "東新橋":"히가시신바시","東麻布":"히가시아자부","浜松町":"하마마쓰초","海岸":"가이간","港南":"고난",
+  "白金":"시로카네","白金台":"시로카네다이","芝":"시바","芝公園":"시바코엔","芝大門":"시바다이몬",
+  "芝浦":"시바우라","虎ノ門":"도라노몬","西新橋":"니시신바시","西麻布":"니시아자부","赤坂":"아카사카",
+  "高輪":"다카나와","麻布十番":"아자부주반","麻布台":"아자부다이","麻布永坂町":"아자부나가사카초",
+  "麻布狸穴町":"아자부마미아나초",
+  "月島":"쓰키시마","勝どき":"가치도키","晴海":"하루미","豊洲":"도요스","有明":"아리아케","汐留":"시오도메",
+  "銀座":"긴자","日本橋":"니혼바시","丸の内":"마루노우치","神田":"간다","お茶の水":"오차노미즈",
+  "秋葉原":"아키하바라","自由が丘":"지유가오카","田園調布":"덴엔초후","深沢":"후카사와","駒沢":"고마자와",
+  "碑文谷":"히몬야","八雲":"야쿠모","柿の木坂":"가키노키자카","二子玉川":"후타코타마가와","上野毛":"가미노게",
+  "用賀":"요가","桜新町":"사쿠라신마치","弦巻":"쓰루마키","武蔵小杉":"무사시코스기","吉祥寺":"기치조지",
+  "荻窪":"오기쿠보","浜田山":"하마다야마","永福":"에이후쿠","桜上水":"사쿠라조스이","成城":"세이조",
+  "経堂":"교도","国立":"구니타치","三鷹":"미타카","中野":"나카노","番町":"반초","麹町":"고지마치",
+  "内堀通り":"우치보리도리","四谷":"요쓰야","市ヶ谷":"이치가야","神楽坂":"가구라자카","目白":"메지로",
+  "池袋":"이케부쿠로","護国寺":"고코쿠지","小石川":"고이시카와","本郷":"혼고","小日向":"고히나타",
+  "本駒込":"혼코마고메","白山":"하쿠산","千石":"센고쿠","新宿":"신주쿠","代々木":"요요기",
+  "千駄ヶ谷":"센다가야","国内その他":"국내 기타","表参道":"오모테산도","原宿":"하라주쿠","青山":"아오야마",
+  "麻布":"아자부","広尾":"히로오","恵比寿":"에비스","目黒":"메구로","五反田":"고탄다","御殿山":"고텐야마",
+  "渋谷":"시부야","松濤":"쇼토","南平台":"난페이다이","代官山":"다이칸야마","青葉台":"아오바다이",
+  "中目黒":"나카메구로","代々木上原":"요요기우에하라","代々木公園":"요요기코엔","駒場":"고마바",
+  "代沢":"다이자와","下北沢":"시모키타자와","池尻":"이케지리","三宿":"미슈쿠","三軒茶屋":"산겐자야",
+  "横浜":"요코하마","みなとみらい":"미나토미라이","関内":"간나이","元町":"모토마치","山下公園":"야마시타코엔",
+  "山手":"야마테","本牧":"혼모쿠","根岸":"네기시","湘南":"쇼난","鎌倉":"가마쿠라","逗子":"즈시",
+  "葉山":"하야마","港北":"고호쿠","都筑":"쓰즈키",
+};
+function ko(name) {
+  if (!name) return "";
+  const parts = String(name).split("・");
+  if (!parts.some(p => KO[p])) return "";
+  return parts.map(p => KO[p] || p).join("·");
+}
+const koSpan = name => { const k = ko(name); return k ? `<span class="ko">${k}</span>` : ""; };
+const koPlace = r => [ko(r.ward), ko(r.town)].filter(Boolean).join(" ") + (r.town && ko(r.town) && r.chome ? ` ${r.chome}초메` : "");
+
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const img = p => p ? (p.startsWith("http") ? p : SITE + p) : "";
@@ -286,7 +328,7 @@ function chip(box, key, label, set, n) {
   const b = document.createElement("button");
   CHIPS.push({ b, key, set });
   b.className = "chip"; b.type = "button"; b.setAttribute("aria-pressed", "false");
-  b.innerHTML = esc(label) + (n != null ? `<small>${n}</small>` : "");
+  b.innerHTML = esc(label) + koSpan(label) + (n != null ? `<small>${n}</small>` : "");
   b.onclick = () => {
     set.has(key) ? set.delete(key) : set.add(key);
     b.setAttribute("aria-pressed", set.has(key)); shown = PAGE; render();
@@ -308,7 +350,7 @@ function buildFilters() {
   const towns = new Map();
   for (const r of act) if (r.town) towns.set(r.town, (towns.get(r.town) || 0) + 1);
   $("#town").insertAdjacentHTML("beforeend", [...towns.entries()].sort((a, b) => b[1] - a[1])
-    .map(([t, n]) => `<option value="${esc(t)}">${esc(t)} (${n})</option>`).join(""));
+    .map(([t, n]) => `<option value="${esc(t)}">${esc(t)} ${ko(t)} (${n})</option>`).join(""));
 
   for (const id of ["q", "pmin", "pmax", "amin", "amax", "ymin", "town", "sort"])
     $("#" + id).addEventListener("input", () => { shown = PAGE; render(); });
@@ -369,14 +411,14 @@ function cardHTML(r) {
       <div class="badges">${badges}${r.thumb ? "" : `<span class="badge">건물 사진</span>`}</div></div>
     <div class="cbody">
       <div class="cname">${esc(r.bldg_name)}</div>
-      <div class="cmeta">${esc(where(r))} · ${esc(unitLine(r))}</div>
-      <div class="price">${man(r.price_man)}${r.price_per_tsubo_man ? `<small>평당 ${Math.round(r.price_per_tsubo_man).toLocaleString()}만</small>` : ""}</div>
+      <div class="cmeta">${esc(where(r))}${koSpan(r.town)} · ${esc(unitLine(r))}</div>
+      <div class="price">${man(r.price_man)}${r.price_per_tsubo_man ? `<small>평당 ${Math.round(r.price_per_tsubo_man).toLocaleString()}만 엔</small>` : ""}</div>
       ${delta(r)}
       <div class="cmeta">${r.completed_year ? `${r.completed_year}년 준공` : ""}${r.route_summary ? ` · ${esc(r.route_summary)}` : ""}</div>
       <div class="tags">
         ${sib > 0 ? `<span class="tag sib">같은 건물 +${sib}건</span>` : ""}
         ${r.same_unit_listings > 1 ? `<span class="tag sib">같은 호실 재등록</span>` : ""}
-        ${(r.area_names || []).map(a => `<span class="tag">${esc(a)}</span>`).join("")}
+        ${(r.area_names || []).map(a => `<span class="tag">${esc(a)}${koSpan(a)}</span>`).join("")}
       </div>
     </div></button>`;
 }
@@ -433,7 +475,7 @@ async function openDetail(id) {
 
   $("#dlgc").innerHTML = `
   <div class="dhead"><div><h2>${esc(d.bldg_name)}</h2>
-    <p>${esc(d.address || "")} · ${esc(unitLine(d))}${d.room_no ? ` · ${esc(d.room_no)}호` : ""}</p></div>
+    <p>${esc(d.address || "")}${koPlace(d) ? `<span class="ko">${koPlace(d)}</span>` : ""} · ${esc(unitLine(d))}${d.room_no ? ` · ${esc(d.room_no)}호` : ""}</p></div>
     <button data-close aria-label="닫기">✕</button></div>
   <div class="dbody">
     ${pics.length ? `<div class="gallery">${pics.map(p => `<figure><img loading="lazy" referrerpolicy="no-referrer" class="${p.plan ? "plan" : ""}" alt="" src="${esc(img(p.url))}"><figcaption>${esc((p.caption || "").split("※")[0])}</figcaption></figure>`).join("")}</div>` : ""}
@@ -468,7 +510,7 @@ async function openDetail(id) {
 
     <h3>건물</h3>
     <table class="spec">
-      ${row("세부 지역", esc((d.area_names || []).join(" / ")))}
+      ${row("세부 지역", (d.area_names || []).map(a => esc(a) + koSpan(a)).join(" / "))}
       ${row("교통", esc(d.access || d.route_summary))}
       ${row("준공", d.completed_ym ? `${d.completed_ym.slice(0, 4)}년 ${+d.completed_ym.slice(4, 6) || ""}${+d.completed_ym.slice(4, 6) ? "월" : ""}` : "")}
       ${row("구조 · 규모", esc([d.structure, floors, d.total_units ? `총 ${d.total_units}호` : null].filter(Boolean).join(" · ")))}
@@ -548,7 +590,7 @@ function renderStats() {
         const s = agg(g.rows.filter(r => r.area_sqm >= lo && r.area_sqm < hi), f);
         return s ? `<tr class="link" data-k="${esc(k)}" data-b="${i}"><td>${label}</td>${cells(s)}</tr>` : "";
       }).join("");
-      return `<div class="scard"><h3>${esc(g.name)}<small>${g.rows.length}건</small></h3>
+      return `<div class="scard"><h3>${esc(g.name)}${koSpan(g.name)}<small>${g.rows.length}건</small></h3>
         <div class="wrapx"><table class="stat">
           <tr><th>전용면적</th><th>건수</th><th>평균</th><th>중앙값</th><th>최저</th><th>최대</th></tr>
           ${body}
