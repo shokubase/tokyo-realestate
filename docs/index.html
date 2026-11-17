@@ -156,6 +156,14 @@ table.stat td.diff { font-weight: 600; }
 .reccard ul { margin: 6px 0 0; padding-left: 16px; font-size: 12.5px; line-height: 1.5; }
 .reccard .warn { color: var(--up); font-size: 12px; margin-top: 4px; }
 .badge.rec { background: var(--new); }
+#map { height: min(72vh, 720px); border-radius: 14px; border: 1px solid var(--line); z-index: 0; background: var(--chip); }
+.leaflet-popup-content { color: #1c1b19; font: 13px/1.5 inherit; margin: 12px 14px; }
+.leaflet-popup-content b.pn { font-size: 14px; }
+.leaflet-popup-content .pm { color: #6f6b63; font-size: 12px; margin-bottom: 6px; }
+.leaflet-popup-content a { display: block; color: #1f4e79; text-decoration: none; padding: 3px 0; border-top: 1px solid #eee; }
+.leaflet-popup-content a:hover { text-decoration: underline; }
+.maplegend { white-space: nowrap; margin-left: 6px; }
+.maplegend i { display: inline-block; width: 16px; height: 10px; vertical-align: -1px; }
 .lout { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
 .lcard { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; box-shadow: var(--shadow); }
 .lcard .k { font-size: 12px; color: var(--muted); }
@@ -216,11 +224,21 @@ footer { text-align: center; color: var(--muted); font-size: 12px; padding: 0 16
   <p>예상 수익률 = 같은 건물 임대 매물의 ㎡당 월 임대료 중앙값 × 이 매물의 면적 × 12개월 ÷ 매매가. 관리비·세금·공실을 빼지 않은 표면 수익률이고, 같은 건물에 임대 매물이 있을 때만 계산됩니다.</p>
   <nav class="tabs">
     <button type="button" data-tab="list" aria-selected="true">매물</button>
+    <button type="button" data-tab="map" aria-selected="false">지도</button>
     <button type="button" data-tab="stats" aria-selected="false">시세 분석</button>
     <button type="button" data-tab="loan" aria-selected="false">대출 계산</button>
   </nav>
 </header>
 <main>
+<section id="tab-map" hidden>
+  <div class="bar" style="margin-top:14px">
+    <div class="count" id="mapcount"></div>
+    <div><button type="button" id="mapfilter">검색 조건 바꾸기</button></div>
+  </div>
+  <div id="map"></div>
+  <p class="snote" id="mapnote">매물 탭에서 고른 매매/임대와 검색 조건이 그대로 적용됩니다. 원 하나가 건물 하나이고, 원이 클수록 그 건물의 매물이 많습니다. 색이 진할수록 평단가가 높습니다. 원을 누르면 매물 목록이 나옵니다. 위치는 사이트가 제공한 건물 좌표입니다.
+    <span class="maplegend">낮음 <i style="background:#9ecae1"></i><i style="background:#6baed6"></i><i style="background:#3182bd"></i><i style="background:#08519c"></i><i style="background:#08306b"></i> 높음</span></p>
+</section>
 <section id="tab-loan" hidden>
   <div class="filters" style="margin-top:14px">
     <b id="Lfrom">직접 입력 — 매물 상세 창의 "대출 계산" 버튼을 누르면 그 매물 값으로 채워집니다</b>
@@ -1044,10 +1062,65 @@ async function renderStats() {
 
 function showTab(name) {
   document.querySelectorAll(".tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === name));
-  for (const t of ["list", "stats", "loan"]) $("#tab-" + t).hidden = name !== t;
+  for (const t of ["list", "map", "stats", "loan"]) $("#tab-" + t).hidden = name !== t;
   if (name === "stats") renderStats();
   if (name === "loan") renderLoan();
+  if (name === "map") renderMap();
 }
+
+// ---------------------------------------------------------------- 지도
+// Leaflet + OpenStreetMap. 지도 탭을 처음 열 때만 라이브러리를 불러온다.
+const LEAFLET = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/";
+let MAP = null, MAPL = null, leafletP = null;
+function loadLeaflet() {
+  return leafletP ??= new Promise((ok, fail) => {
+    const css = document.createElement("link"); css.rel = "stylesheet"; css.href = LEAFLET + "leaflet.min.css";
+    const js = document.createElement("script"); js.src = LEAFLET + "leaflet.min.js"; js.onload = ok; js.onerror = fail;
+    document.head.append(css, js);
+  });
+}
+const MAPCOL = ["#9ecae1", "#6baed6", "#3182bd", "#08519c", "#08306b"];
+function popupHTML(rs) {
+  const r0 = rs[0], sorted = [...rs].sort((a, b) => a.price_man - b.price_man);
+  return `<b class="pn">${esc(r0.bldg_name)}</b>
+    <div class="pm">${esc(where(r0))}${koSpan(r0.town)}${r0.completed_year ? ` · ${r0.completed_year}년 준공` : ""}</div>
+    ${sorted.slice(0, 8).map(r => `<a href="#" data-id="${r.id}">${esc(unitLine(r))} — <b>${money(r)}</b></a>`).join("")}
+    ${sorted.length > 8 ? `<div class="pm">외 ${sorted.length - 8}건</div>` : ""}`;
+}
+async function renderMap() {
+  try { await loadLeaflet(); }
+  catch { $("#mapcount").textContent = "지도를 불러오지 못했습니다."; return; }
+  if (!MAP) {
+    MAP = L.map("map", { preferCanvas: true }).setView([35.663, 139.725], 13);
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }).addTo(MAP);
+    MAPL = L.layerGroup().addTo(MAP);
+  }
+  MAP.invalidateSize(); MAPL.clearLayers();
+  const rows = filtered().filter(r => r.lat && r.lng);
+  const g = new Map();
+  for (const r of rows) (g.get(r.bldg_code) || g.set(r.bldg_code, []).get(r.bldg_code)).push(r);
+  // 평단가 5분위로 색을 나눈다 (지금 보이는 매물 기준)
+  const ts = rows.map(r => +r.price_per_tsubo_man).filter(x => x > 0).sort((a, b) => a - b);
+  const cuts = [.2, .4, .6, .8].map(p => ts.length ? ts[Math.min(ts.length - 1, Math.floor(ts.length * p))] : 0);
+  const pts = [];
+  for (const rs of g.values()) {
+    const r0 = rs[0], v = rs.map(r => +r.price_per_tsubo_man).filter(x => x > 0).sort((a, b) => a - b);
+    const mid = v.length ? v[v.length >> 1] : 0;
+    const m = L.circleMarker([r0.lat, r0.lng], {
+      radius: 6 + Math.min(8, rs.length * 1.5), color: "#fff", weight: 1.5,
+      fillColor: MAPCOL[cuts.filter(c => mid > c).length], fillOpacity: .92 });
+    m.bindPopup(() => popupHTML(rs), { maxWidth: 320 });
+    m.bindTooltip(`${r0.bldg_name} (${rs.length})`);
+    m.addTo(MAPL); pts.push([r0.lat, r0.lng]);
+  }
+  if (pts.length) MAP.fitBounds(pts, { padding: [30, 30], maxZoom: 16 });
+  $("#mapcount").innerHTML = `${st.deal === "rent" ? "임대" : "매매"} ${rows.length.toLocaleString()}건<small>건물 ${g.size.toLocaleString()}동</small>`;
+}
+$("#mapfilter").onclick = () => showTab("list");
+$("#map").addEventListener("click", e => {
+  const a = e.target.closest("[data-id]"); if (a) { e.preventDefault(); openDetail(+a.dataset.id); }
+});
 
 // ---------------------------------------------------------------- 대출 계산
 const LOAN_IDS = ["Lprice", "Ldown", "Lrate", "Lyears", "Ltype", "Lcost", "Lfee", "Lother", "Lrent"];
