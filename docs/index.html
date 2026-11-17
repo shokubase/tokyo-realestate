@@ -153,6 +153,14 @@ table.stat td.diff { font-weight: 600; }
 .reccard ul { margin: 6px 0 0; padding-left: 16px; font-size: 12.5px; line-height: 1.5; }
 .reccard .warn { color: var(--up); font-size: 12px; margin-top: 4px; }
 .badge.rec { background: var(--new); }
+.lout { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
+.lcard { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; box-shadow: var(--shadow); }
+.lcard .k { font-size: 12px; color: var(--muted); }
+.lcard .v { font-size: 20px; font-weight: 700; margin-top: 2px; letter-spacing: -.01em; }
+.lcard .s { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.lcard.main { border-color: var(--accent); }
+.lcard .v .neg { color: var(--up); } .lcard .v .pos { color: var(--down); }
+#LpriceTxt { color: var(--accent); font-weight: 600; }
 .dealbar { margin: 14px 0 0; }
 .chat { display: flex; gap: 8px; margin: 12px 0 0; }
 .chat input { flex: 1; min-width: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
@@ -200,9 +208,29 @@ footer { text-align: center; color: var(--muted); font-size: 12px; padding: 0 16
   <nav class="tabs">
     <button type="button" data-tab="list" aria-selected="true">매물</button>
     <button type="button" data-tab="stats" aria-selected="false">시세 분석</button>
+    <button type="button" data-tab="loan" aria-selected="false">대출 계산</button>
   </nav>
 </header>
 <main>
+<section id="tab-loan" hidden>
+  <div class="filters" style="margin-top:14px">
+    <b id="Lfrom">직접 입력 — 매물 상세 창의 "대출 계산" 버튼을 누르면 그 매물 값으로 채워집니다</b>
+    <div class="frow">
+      <div class="f"><label for="Lprice">매매가 (만 엔) <span id="LpriceTxt"></span></label><input id="Lprice" type="number" min="0" step="100" value="20000" inputmode="numeric"></div>
+      <div class="f"><label for="Ldown">자기자금 (매매가의 %)</label><input id="Ldown" type="number" min="0" max="100" step="5" value="20" inputmode="decimal"></div>
+      <div class="f"><label for="Lrate">금리 (연 %)</label><input id="Lrate" type="number" min="0" step="0.1" value="1.5" inputmode="decimal"></div>
+      <div class="f"><label for="Lyears">대출 기간 (년)</label><input id="Lyears" type="number" min="1" max="50" step="1" value="35" inputmode="numeric"></div>
+      <div class="f"><label for="Ltype">상환 방식</label><select id="Ltype"><option value="level">원리금균등 (매달 같은 금액)</option><option value="principal">원금균등 (갈수록 줄어듦)</option></select></div>
+      <div class="f"><label for="Lcost">구입 제비용 (매매가의 %)</label><input id="Lcost" type="number" min="0" step="0.5" value="7" inputmode="decimal"></div>
+      <div class="f"><label for="Lfee">관리비+수선적립금 (월, 엔)</label><input id="Lfee" type="number" min="0" step="1000" value="30000" inputmode="numeric"></div>
+      <div class="f"><label for="Lother">기타 월 비용 (세금·보험 등, 엔)</label><input id="Lother" type="number" min="0" step="1000" value="0" inputmode="numeric"></div>
+      <div class="f"><label for="Lrent">예상 월세 (만 엔, 임대 줄 경우만)</label><input id="Lrent" type="number" min="0" step="1" value="" placeholder="비워 두면 계산 안 함" inputmode="decimal"></div>
+    </div>
+  </div>
+  <div class="lout" id="Lout"></div>
+  <div class="scard" style="margin-top:14px"><h3>연도별 상환</h3><div class="wrapx" style="max-height:420px;overflow-y:auto"><table class="stat" id="Ltable"></table></div></div>
+  <p class="snote">단순 계산입니다. 금리는 예시 값이고 전 기간 고정으로 가정했습니다. 실제 금리, 대출 한도, 대출 가능 여부는 은행과 체류 자격·소득에 따라 달라집니다. 구입 제비용(중개수수료, 등기, 취득세, 인지세, 대출 수수료 등)은 보통 매매가의 6~8% 정도로 알려져 있어 7%를 기본값으로 두었고, 매물마다 다릅니다. 고정자산세·도시계획세와 화재보험은 "기타 월 비용"에 직접 넣으세요.</p>
+</section>
 <section id="tab-stats" hidden>
   <div class="sctl">
     <div class="seg" id="sgroup">
@@ -386,6 +414,7 @@ async function sbAll(path) {
 function man(v) {            // 万円 → "1억 3,980만 엔"
   if (v == null) return "-";
   v = Math.round(Number(v));
+  if (!v) return "0엔";
   const oku = Math.floor(v / 10000), rest = v % 10000;
   return (oku ? `${oku}억 ` : "") + (rest ? `${rest.toLocaleString()}만 ` : "") + "엔";
 }
@@ -779,6 +808,7 @@ async function openDetail(id) {
     <div class="links">
       <a href="${esc(SITE + d.url)}" target="_blank" rel="noopener noreferrer">원문 페이지 열기</a>
       ${d.lat && d.lng ? `<a class="sec" href="https://www.google.com/maps/search/?api=1&query=${d.lat},${d.lng}" target="_blank" rel="noopener noreferrer">지도에서 보기</a>` : ""}
+      ${isRent ? "" : `<a class="sec" href="#" data-loan="${d.id}">대출 계산</a>`}
     </div>
 
     <h3>같은 건물의 ${isRent ? "매매" : "임대"} 매물 (${cross.length}건)</h3>
@@ -845,6 +875,7 @@ $("#grid").addEventListener("click", e => { const c = e.target.closest(".card");
 $("#recrow").addEventListener("click", e => { const c = e.target.closest(".reccard"); if (c) openDetail(+c.dataset.id); });
 $("#dlg").addEventListener("click", e => {
   if (e.target === $("#dlg") || e.target.closest("[data-close]")) return $("#dlg").close();
+  const ln = e.target.closest("[data-loan]"); if (ln) { e.preventDefault(); return loanFrom(+ln.dataset.loan); }
   const tr = e.target.closest("tr.link"); if (tr) openDetail(+tr.dataset.id);
 });
 
@@ -944,9 +975,63 @@ async function renderStats() {
 
 function showTab(name) {
   document.querySelectorAll(".tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === name));
-  $("#tab-list").hidden = name !== "list";
-  $("#tab-stats").hidden = name !== "stats";
+  for (const t of ["list", "stats", "loan"]) $("#tab-" + t).hidden = name !== t;
   if (name === "stats") renderStats();
+  if (name === "loan") renderLoan();
+}
+
+// ---------------------------------------------------------------- 대출 계산
+const LOAN_IDS = ["Lprice", "Ldown", "Lrate", "Lyears", "Ltype", "Lcost", "Lfee", "Lother", "Lrent"];
+function renderLoan() {
+  const v = id => Math.max(0, parseFloat($("#" + id).value) || 0);
+  const price = v("Lprice"), down = price * Math.min(v("Ldown"), 100) / 100, P = price - down;
+  const n = Math.max(1, Math.round(v("Lyears") * 12)), r = v("Lrate") / 1200;
+  const level = $("#Ltype").value === "level";
+  const fixed = r ? P * r / (1 - Math.pow(1 + r, -n)) : P / n;        // 원리금균등의 월 상환액
+  $("#LpriceTxt").textContent = price ? `= ${man(price)}` : "";
+
+  let bal = P, totalInt = 0, first = 0, last = 0;
+  const years = [];
+  for (let m = 1; m <= n; m++) {
+    const interest = bal * r;
+    const principal = Math.min(bal, level ? fixed - interest : P / n);
+    const pay = interest + principal;
+    if (m === 1) first = pay;
+    last = pay; bal -= principal; totalInt += interest;
+    const y = years[Math.ceil(m / 12) - 1] ||= { pay: 0, int: 0, prin: 0, bal: 0 };
+    y.pay += pay; y.int += interest; y.prin += principal; y.bal = Math.max(0, bal);
+  }
+  const fees = (v("Lfee") + v("Lother")) / 10000;                       // 만 엔
+  const cost = price * v("Lcost") / 100, cash = down + cost, burden = first + fees;
+  const rent = v("Lrent");
+  const m1 = x => `${dec(x)}만 엔`;
+  const card = (k, val, s = "", cls = "") => `<div class="lcard ${cls}"><div class="k">${k}</div><div class="v">${val}</div><div class="s">${s}</div></div>`;
+  let html =
+      card("월 상환액" + (level ? "" : " (첫 달)"), m1(first), level ? "매달 같은 금액" : `마지막 달 ${m1(last)}`, "main")
+    + card("월 총 부담", m1(burden), `상환 ${m1(first)} + 관리·기타 ${m1(fees)}`, "main")
+    + card("대출금", man(P), `매매가 ${man(price)} − 자기자금 ${man(down)}`)
+    + card("처음에 필요한 현금", man(cash), `자기자금 ${man(down)} + 제비용 ${man(cost)}`)
+    + card("총 이자", man(totalInt), `총 상환액 ${man(P + totalInt)}`);
+  if (rent > 0 && price > 0) {
+    const net = rent - burden;
+    html += card("임대 시 월 수지", `<span class="${net < 0 ? "neg" : "pos"}">${net < 0 ? "−" : "+"}${m1(Math.abs(net))}</span>`, `월세 ${m1(rent)} − 월 총 부담 ${m1(burden)}`)
+      + card("표면 수익률", `연 ${dec(rent * 12 / price * 100, 2)}%`, "월세 × 12 ÷ 매매가")
+      + card("자기자본 대비 수익률", cash > 0 ? `연 ${dec(net * 12 / cash * 100, 2)}%` : "-", "월 수지 × 12 ÷ 처음에 필요한 현금");
+  }
+  $("#Lout").innerHTML = html;
+  $("#Ltable").innerHTML = `<tr><th>연차</th><th>연 상환액</th><th>그중 이자</th><th>그중 원금</th><th>연말 잔액</th></tr>`
+    + years.map((y, i) => `<tr><td>${i + 1}년차</td><td>${m1(y.pay)}</td><td>${m1(y.int)}</td><td>${m1(y.prin)}</td><td>${man(y.bal)}</td></tr>`).join("");
+}
+LOAN_IDS.forEach(id => $("#" + id).addEventListener("input", renderLoan));
+// 매물 상세 창 → 그 매물 값으로 채워서 열기
+function loanFrom(id) {
+  const r = BUY.find(x => x.id === id); if (!r) return;
+  $("#Lprice").value = Math.round(r.price_man);
+  $("#Lfee").value = (r.admin_fee_yen || 0) + (r.repair_reserve_yen || 0);
+  const est = r.bldg_rent_per_sqm_man && r.area_sqm ? r.bldg_rent_per_sqm_man * r.area_sqm : null;
+  $("#Lrent").value = est ? Math.round(est * 10) / 10 : "";
+  $("#Lfrom").textContent = `${r.bldg_name} · ${unitLine(r)}${est ? " — 예상 월세는 같은 건물 임대 매물 기준 추정값" : ""}`;
+  $("#dlg").close(); showTab("loan"); scrollTo(0, 0);
 }
 document.querySelector(".tabs").addEventListener("click", e => { const b = e.target.closest("button"); if (b) showTab(b.dataset.tab); });
 for (const [id, key] of [["sgroup", "group"], ["smetric", "metric"], ["speriod", "period"]])
