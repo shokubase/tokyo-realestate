@@ -21,6 +21,7 @@ const json = (body: unknown, status = 200) =>
 const Query = z.object({
   understood: z.boolean().describe("매물 검색 질문으로 해석할 수 있으면 true"),
   deal: z.enum(["buy", "rent"]).describe("buy=매매, rent=임대(월세)"),
+  wards: z.array(z.string()).describe("구 일본어 이름 목록 (제공된 목록의 이름만, 예: 渋谷区)"),
   areas: z.array(z.string()).describe("세부 지역 코드 목록 (제공된 목록의 code만)"),
   towns: z.array(z.string()).describe("동네(町) 일본어 이름 목록 (제공된 목록의 이름만)"),
   area_min: z.number().nullable().describe("전용면적 하한 ㎡"),
@@ -46,18 +47,24 @@ async function sb(path: string) {
 }
 
 // 지역 목록은 워커가 살아 있는 동안 한 번만 읽는다
-type Places = { text: string; areas: Set<string>; towns: Set<string> };
+type Places = { text: string; wards: Set<string>; areas: Set<string>; towns: Set<string> };
 let places: Promise<Places> | null = null;
 function loadPlaces(): Promise<Places> {
   places ??= (async () => {
-    const [areas, blds] = await Promise.all([
-      sb("areas?select=code,name&source=eq.kencorp&order=code"),
-      sb("buildings?select=town,ward&limit=5000"),
-    ]);
+    const areas = await sb("areas?select=code,name&source=eq.kencorp&order=code");
+    // PostgREST 는 한 번에 1,000행까지만 준다 → 끝까지 나눠 읽는다
+    const blds: { town: string; ward: string }[] = [];
+    for (let off = 0; ; off += 1000) {
+      const page = await sb(`buildings?select=town,ward&order=id&limit=1000&offset=${off}`);
+      blds.push(...page);
+      if (page.length < 1000) break;
+    }
     const withTown = blds.filter((b: { town: string }) => b.town);
     const labels = [...new Set(withTown.map((b: { town: string; ward: string }) => `${b.town}(${b.ward})`))];
+    const wards = new Set<string>(withTown.map((b: { ward: string }) => b.ward).filter(Boolean));
     return {
-      text: `세부 지역 (code = 이름):\n${areas.map((a: { code: string; name: string }) => `${a.code} = ${a.name}`).join("\n")}\n\n동네(町):\n${labels.join(", ")}`,
+      text: `구:\n${[...wards].join(", ")}\n\n세부 지역 (code = 이름):\n${areas.map((a: { code: string; name: string }) => `${a.code} = ${a.name}`).join("\n")}\n\n동네(町):\n${labels.join(", ")}`,
+      wards,
       areas: new Set<string>(areas.map((a: { code: string }) => a.code)),
       towns: new Set<string>(withTown.map((b: { town: string }) => b.town)),
     };
@@ -70,11 +77,13 @@ const SYSTEM = (placeText: string) => `너는 도쿄 주거용 부동산 매물 
 
 ## 지역
 질문의 지역명(한글 발음, 일본어, 영문 모두 가능)을 아래 목록에서 찾아 넣는다.
+한글로 적힌 지명은 먼저 일본어 읽기로 바꾼 뒤(히로오 = ひろお = 広尾, 에비스 = えびす = 恵比寿) 동네 목록을 처음부터 끝까지 대조한다. 목록에 있는데 없다고 답하지 않도록 한다.
 - 동네(町) 단위로 특정되면 towns 에 일본어 이름만 넣는다 (괄호 안의 구 이름은 빼고). 예: "미나미아자부" → 南麻布. towns 에는 아래 동네 목록에 실제로 있는 이름만 넣을 수 있다.
+- "시부야구", "미나토구"처럼 구를 말하면 wards 에 일본어 구 이름을 넣는다. "시부야"처럼 구 이름이자 동네 이름이면, "구"를 붙였을 때만 wards 로 보고 아니면 세부 지역이나 동네로 본다.
 - "아자부 일대", "롯폰기 쪽"처럼 넓게 말하면 areas 에 세부 지역 code 를 넣는다.
-- 말한 동네가 동네 목록에는 없지만 세부 지역 이름에 들어 있으면(예: "히로오" → 麻布・広尾) 그 세부 지역 code 를 areas 에 넣고, reply 에서 그 동네만 따로 고를 수 없어 해당 세부 지역 전체로 검색한다고 알린다.
+- 말한 동네가 동네 목록에는 없지만 세부 지역 이름에 들어 있으면(예: 동네 목록에 없는 "오모테산도" → 表参道・原宿・青山) 그 세부 지역 code 를 areas 에 넣고, reply 에서 그 동네만 따로 고를 수 없어 해당 세부 지역 전체로 검색한다고 알린다.
 - 동네 이름이 여러 동네의 앞부분이면(예: "아자부" → 南麻布, 元麻布, 西麻布, 東麻布, 麻布十番, 麻布台 …) 해당하는 동네를 모두 넣는다.
-- 목록에 없는 지역이면 비워 두고 reply 에서 그 지역 데이터가 없다고 알린다. 지역을 말하지 않았으면 둘 다 빈 배열.
+- 목록에 없는 지역이면 비워 두고 reply 에서 그 지역 데이터가 없다고 알린다. 지역을 말하지 않았으면 wards, areas, towns 모두 빈 배열.
 
 ${placeText}
 
@@ -118,7 +127,8 @@ Deno.serve(async (req: Request) => {
     const response = await client.messages.parse({
       model: MODEL,
       max_tokens: 16000,
-      output_config: { effort: "low", format: zodOutputFormat(Query) },
+      // low 에서는 한글 지명 → 한자 동네 대조가 들쭉날쭉했다 (히로오 → 広尾 를 놓침)
+      output_config: { effort: "medium", format: zodOutputFormat(Query) },
       system: SYSTEM(known.text),
       messages: [{ role: "user", content: question }],
     });
@@ -127,6 +137,7 @@ Deno.serve(async (req: Request) => {
     }
     // 목록에 없는 지역은 버린다 (없는 동네로 걸러 결과가 0건이 되는 것을 막는다)
     const query = response.parsed_output;
+    query.wards = query.wards.filter((w) => known.wards.has(w));
     query.areas = query.areas.filter((c) => known.areas.has(c));
     query.towns = query.towns.filter((t) => known.towns.has(t));
     return json({ query, model: response.model, usage: response.usage });

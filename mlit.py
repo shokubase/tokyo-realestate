@@ -138,7 +138,7 @@ def main() -> int:
     args = ap.parse_args()
 
     load_env()
-    for city in args.city or ["13103"]:
+    for city in args.city or ["13103", "13113", "13104"]:   # 港区, 渋谷区, 新宿区
         raw = download(city, args.frm, args.to)
         log(f"city {city}: {len(raw)}행 다운로드 ({args.frm}~{args.to})")
         if args.inspect:

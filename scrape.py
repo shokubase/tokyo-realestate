@@ -32,6 +32,7 @@ from playwright.sync_api import Page, sync_playwright
 
 SOURCE = "kencorp"
 BASE = "https://www.kencorp.co.jp"
+DEFAULT_WARDS = ["12", "2", "8"]  # 港区, 渋谷区, 新宿区 (사이트의 구 코드)
 PER_PAGE = 100
 DELAY_SEC = 1.5
 DETAIL_BATCH = 20
@@ -322,13 +323,13 @@ def block_heavy(route):
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--ward", action="append", help="구 코드 (기본 12=港区). 여러 번 지정 가능")
+    ap.add_argument("--ward", action="append", help="구 코드 (기본: 港区 12, 渋谷区 2, 新宿区 8). 여러 번 지정 가능")
     ap.add_argument("--deal", choices=["buy", "rent", "both"], default="both", help="매매/임대")
     ap.add_argument("--areas", action="store_true", help="에리어 소속을 강제 갱신")
     ap.add_argument("--max-details", type=int, default=2000)
     ap.add_argument("--headed", action="store_true")
     args = ap.parse_args()
-    wards = args.ward or ["12"]
+    wards = args.ward or DEFAULT_WARDS
     deals = ["buy", "rent"] if args.deal == "both" else [args.deal]
 
     load_env()
