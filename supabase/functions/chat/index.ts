@@ -142,7 +142,18 @@ Deno.serve(async (req: Request) => {
     query.wards = query.wards.filter((w) => known.wards.has(w));
     query.areas = query.areas.filter((c) => known.areas.has(c));
     query.towns = query.towns.filter((t) => known.towns.has(t));
-    return json({ query, model: response.model, usage: response.usage });
+    // 사용량을 쌓고, 이번 달 집계를 함께 돌려준다 (페이지의 사용량 표시용)
+    const u = response.usage;
+    const stats = await fetch(`${SB_URL}/rest/v1/rpc/chat_record`, {
+      method: "POST",
+      headers: { apikey: SB_ANON, Authorization: `Bearer ${SB_ANON}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        p_password: body.password ?? null,
+        p_in: (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0),
+        p_out: u.output_tokens ?? 0,
+      }),
+    }).then((r) => r.json()).catch(() => null);
+    return json({ query, model: response.model, usage: response.usage, stats });
   } catch (e) {
     if (e instanceof Anthropic.AuthenticationError) return json({ error: "bad_api_key" }, 503);
     if (e instanceof Anthropic.RateLimitError) return json({ error: "busy" }, 429);

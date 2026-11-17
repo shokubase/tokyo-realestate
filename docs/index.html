@@ -170,6 +170,7 @@ table.stat td.diff { font-weight: 600; }
 .chat button { padding: 10px 16px; border: 0; border-radius: 10px; background: var(--accent); color: var(--card); font-weight: 600; cursor: pointer; white-space: nowrap; }
 .chat button:disabled { opacity: .6; cursor: wait; }
 #aibar { margin: 10px 0 0; }
+.aiuse { margin: 5px 2px 0; font-size: 12px; color: var(--muted); min-height: 1em; }
 .empty, .loading { text-align: center; color: var(--muted); padding: 60px 0; }
 .more { display: block; margin: 20px auto 0; padding: 10px 22px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); cursor: pointer; }
 
@@ -266,6 +267,7 @@ footer { text-align: center; color: var(--muted); font-size: 12px; padding: 0 16
            placeholder="AI에게 묻기 — 예: 아자부 80㎡ 근방 3억 이하, 평당 싼 순">
     <button type="submit">AI 검색</button>
   </form>
+  <p class="aiuse" id="aiuse"></p>
   <div class="scope" id="aibar" hidden><span id="aitext"></span><button type="button" id="aiclear">조건 지우기</button></div>
   <details class="filters" open>
     <summary>검색 조건 <span id="fsum"></span></summary>
@@ -749,6 +751,14 @@ const CHAT_ERR = {
   busy: "요청이 몰려 있습니다. 잠시 후 다시 시도해 주세요.",
   no_answer: "질문을 해석하지 못했습니다. 다르게 물어봐 주세요.",
 };
+// 이번 달 AI 검색 사용량. 잔액을 알려주는 API가 없어, 이 챗봇이 쓴 토큰으로 계산한 추정치다.
+function showUsage(s) {
+  if (!s) return;
+  const left = Math.max(0, s.credit_usd - s.cost_usd);
+  $("#aiuse").textContent = `AI 검색 이번 달 ${Number(s.calls).toLocaleString()}건 · 약 $${Number(s.cost_usd).toFixed(2)} 사용 · 월 크레딧 $${s.credit_usd} 중 약 $${left.toFixed(2)} 남음 (이 검색창 사용분만 계산한 추정치)`;
+}
+sb("rpc/chat_stats").then(showUsage).catch(() => {});
+
 async function ask(question) {
   if (!question) return;
   const pw = store.get("chatpw") || prompt(tr("가족 비밀번호를 입력하세요"));
@@ -767,6 +777,7 @@ async function ask(question) {
       return render();
     }
     store.set("chatpw", pw);
+    showUsage(j.stats);
     applyQuery(j.query);
   } catch (e) {
     st.ai = "연결에 실패했습니다. 잠시 후 다시 시도해 주세요."; render();
