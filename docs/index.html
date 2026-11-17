@@ -1,0 +1,468 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>도쿄 매물 트래커</title>
+<style>
+:root {
+  --bg: #f6f5f2; --card: #ffffff; --ink: #1c1b19; --muted: #6f6b63; --line: #e3e0d9;
+  --accent: #1f4e79; --accent-soft: #e4edf5; --up: #b3261e; --down: #1a7f4b;
+  --new: #b45309; --chip: #efede8; --shadow: 0 1px 2px rgba(0,0,0,.06), 0 4px 14px rgba(0,0,0,.05);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #151514; --card: #1f1f1d; --ink: #ecebe7; --muted: #a09c93; --line: #33322f;
+    --accent: #8ab8e0; --accent-soft: #24313d; --up: #f28b82; --down: #6fcf97;
+    --new: #f0b35a; --chip: #2a2a27; --shadow: 0 1px 2px rgba(0,0,0,.4);
+  }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Hiragino Sans",
+        "Noto Sans KR", "Noto Sans JP", "Segoe UI", sans-serif;
+}
+button, input, select { font: inherit; color: inherit; }
+header.top { padding: 20px 16px 8px; max-width: 1280px; margin: 0 auto; }
+header.top h1 { margin: 0; font-size: 22px; letter-spacing: -.01em; }
+header.top p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+main { max-width: 1280px; margin: 0 auto; padding: 0 16px 60px; }
+
+.filters {
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+  padding: 14px; margin: 12px 0 14px; box-shadow: var(--shadow);
+}
+.filters summary { cursor: pointer; font-weight: 600; list-style: none; display: flex; justify-content: space-between; }
+.filters summary::-webkit-details-marker { display: none; }
+.filters summary span { color: var(--muted); font-weight: 400; font-size: 13px; }
+.frow { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 12px; }
+.f label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 3px; }
+.f input, .f select {
+  width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px;
+  background: var(--bg); min-width: 0;
+}
+.pair { display: flex; gap: 6px; align-items: center; }
+.pair span { color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.chips .lbl { font-size: 12px; color: var(--muted); width: 100%; margin-bottom: -2px; }
+.chip {
+  border: 1px solid var(--line); background: var(--bg); border-radius: 999px;
+  padding: 5px 11px; font-size: 13px; cursor: pointer; user-select: none;
+}
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--card); }
+.chip small { opacity: .65; margin-left: 3px; }
+
+.bar { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 6px 2px 12px; flex-wrap: wrap; }
+.bar .count { font-weight: 600; }
+.bar .count small { color: var(--muted); font-weight: 400; margin-left: 6px; }
+.bar select { padding: 7px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--card); }
+.bar button { padding: 7px 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--card); cursor: pointer; }
+.scope { background: var(--accent-soft); border-radius: 10px; padding: 8px 12px; margin-bottom: 12px; display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+.scope button { border: 0; background: none; color: var(--accent); cursor: pointer; font-weight: 600; }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 14px; }
+.card {
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
+  cursor: pointer; box-shadow: var(--shadow); display: flex; flex-direction: column;
+  text-align: left; padding: 0; width: 100%;
+}
+.card:hover { border-color: var(--accent); }
+.card.gone { opacity: .6; }
+.thumb { aspect-ratio: 4/3; background: var(--chip); position: relative; overflow: hidden; }
+.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.badges { position: absolute; top: 8px; left: 8px; display: flex; gap: 5px; flex-wrap: wrap; }
+.badge { font-size: 11px; font-weight: 700; padding: 3px 7px; border-radius: 6px; background: rgba(20,20,20,.78); color: #fff; }
+.badge.new { background: var(--new); color: #fff; }
+.badge.chg { background: #7c3aed; }
+.badge.gone { background: #555; }
+.cbody { padding: 11px 13px 13px; display: flex; flex-direction: column; gap: 4px; flex: 1; }
+.cname { font-weight: 650; font-size: 15px; line-height: 1.35; }
+.cmeta { color: var(--muted); font-size: 13px; }
+.price { font-size: 19px; font-weight: 700; letter-spacing: -.01em; margin-top: 4px; }
+.price small { font-size: 12px; font-weight: 500; color: var(--muted); margin-left: 6px; }
+.delta { font-size: 12px; font-weight: 600; }
+.delta.down { color: var(--down); } .delta.up { color: var(--up); }
+.tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: auto; padding-top: 7px; }
+.tag { font-size: 11px; background: var(--chip); border-radius: 5px; padding: 2px 6px; color: var(--muted); }
+.tag.sib { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.empty, .loading { text-align: center; color: var(--muted); padding: 60px 0; }
+.more { display: block; margin: 20px auto 0; padding: 10px 22px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); cursor: pointer; }
+
+dialog { border: 0; padding: 0; border-radius: 16px; width: min(920px, 96vw); max-height: 92vh; background: var(--card); color: var(--ink); }
+dialog::backdrop { background: rgba(0,0,0,.55); }
+.dhead { position: sticky; top: 0; background: var(--card); padding: 14px 18px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; z-index: 2; }
+.dhead h2 { margin: 0; font-size: 18px; line-height: 1.3; }
+.dhead p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+.dhead button { border: 0; background: var(--chip); border-radius: 999px; width: 34px; height: 34px; cursor: pointer; flex: none; font-size: 16px; }
+.dbody { padding: 16px 18px 22px; }
+.gallery { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px; scroll-snap-type: x mandatory; }
+.gallery figure { margin: 0; flex: none; width: min(420px, 80vw); scroll-snap-align: start; }
+.gallery img { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 10px; background: var(--chip); display: block; }
+.gallery img.plan { object-fit: contain; background: #fff; }
+.gallery figcaption { font-size: 11px; color: var(--muted); margin-top: 3px; }
+.dprice { font-size: 24px; font-weight: 750; margin: 12px 0 2px; }
+.links { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 4px; }
+.links a { text-decoration: none; padding: 8px 13px; border-radius: 9px; background: var(--accent); color: var(--card); font-weight: 600; font-size: 13px; }
+.links a.sec { background: var(--chip); color: var(--ink); }
+h3 { font-size: 14px; margin: 22px 0 8px; }
+table.spec { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+table.spec th { text-align: left; color: var(--muted); font-weight: 500; width: 9.5em; vertical-align: top; padding: 6px 8px 6px 0; border-bottom: 1px solid var(--line); white-space: nowrap; }
+table.spec td { padding: 6px 0; border-bottom: 1px solid var(--line); word-break: break-word; }
+table.rows { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+table.rows th { text-align: left; color: var(--muted); font-weight: 500; font-size: 12px; padding: 5px 8px 5px 0; border-bottom: 1px solid var(--line); }
+table.rows td { padding: 7px 8px 7px 0; border-bottom: 1px solid var(--line); }
+table.rows tr.link { cursor: pointer; } table.rows tr.link:hover td { color: var(--accent); }
+table.rows tr.cur td { font-weight: 700; }
+.wrapx { overflow-x: auto; }
+footer { text-align: center; color: var(--muted); font-size: 12px; padding: 0 16px 40px; }
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>도쿄 매물 트래커</h1>
+  <p id="status">불러오는 중…</p>
+</header>
+<main>
+  <details class="filters" open>
+    <summary>검색 조건 <span id="fsum"></span></summary>
+    <div class="frow">
+      <div class="f"><label for="q">건물명 · 주소</label><input id="q" type="search" placeholder="예: 麻布, タワー"></div>
+      <div class="f"><label>가격 (억 엔)</label><div class="pair"><input id="pmin" type="number" min="0" step="0.5" placeholder="최소" inputmode="decimal"><span>~</span><input id="pmax" type="number" min="0" step="0.5" placeholder="최대" inputmode="decimal"></div></div>
+      <div class="f"><label>전용면적 (㎡)</label><div class="pair"><input id="amin" type="number" min="0" step="10" placeholder="최소" inputmode="decimal"><span>~</span><input id="amax" type="number" min="0" step="10" placeholder="최대" inputmode="decimal"></div></div>
+      <div class="f"><label for="ymin">준공 연도 (이후)</label><input id="ymin" type="number" min="1950" max="2100" placeholder="예: 2010" inputmode="numeric"></div>
+      <div class="f"><label for="town">동네 (町)</label><select id="town"><option value="">전체</option></select></div>
+    </div>
+    <div class="chips" id="areas"><span class="lbl">세부 지역</span></div>
+    <div class="chips" id="rooms"><span class="lbl">방 개수</span></div>
+    <div class="chips" id="flags"><span class="lbl">조건</span></div>
+  </details>
+
+  <div class="scope" id="scope" hidden><span id="scopeText"></span><button id="scopeClear">전체 보기</button></div>
+  <div class="bar">
+    <div class="count" id="count"></div>
+    <div style="display:flex;gap:8px">
+      <button id="reset">조건 초기화</button>
+      <select id="sort" aria-label="정렬">
+        <option value="new">최신 등록순</option>
+        <option value="price_desc">가격 높은순</option>
+        <option value="price_asc">가격 낮은순</option>
+        <option value="tsubo_asc">평단가 낮은순</option>
+        <option value="tsubo_desc">평단가 높은순</option>
+        <option value="area_desc">면적 넓은순</option>
+        <option value="year_desc">준공 최신순</option>
+      </select>
+    </div>
+  </div>
+  <div id="grid" class="grid"></div>
+  <div id="after"></div>
+</main>
+<footer>가족용 개인 페이지입니다. 매물 정보의 출처와 권리는 각 게재처에 있으며, 실제 조건은 원문 페이지에서 확인하세요.</footer>
+
+<dialog id="dlg"><div id="dlgc"></div></dialog>
+
+<script>
+const SB_URL = "https://njgdwqkdyszyeyngaxai.supabase.co";
+const SB_KEY = "sb_publishable_u0298GNaBKRVjKStW0VacQ_kvpMvAdv";
+const SITE = "https://www.kencorp.co.jp";
+const PAGE = 60;
+
+const LIST_COLS = [
+  "id","prop_code","url","bldg_code","bldg_name","ward","town","chome","address","area_codes","area_names",
+  "wing","room_no","floor","layout","area_sqm","area_tsubo","price_man","price_per_tsubo_man",
+  "admin_fee_yen","repair_reserve_yen","orientation","occupancy","completed_year","completed_ym",
+  "total_units","floors_above","route_summary","is_new","is_price_changed","is_active",
+  "first_seen","delisted_on","bldg_active_listings","bldg_total_listings","has_other_listing_in_bldg",
+  "same_unit_listings","initial_price_man","price_changes","last_price_change_on","lat","lng",
+  "thumb:images->0->>url"
+].join(",");
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const img = p => p ? (p.startsWith("http") ? p : SITE + p) : "";
+
+async function sb(path) {
+  const r = await fetch(`${SB_URL}/rest/v1/${path}`, { headers: { apikey: SB_KEY } });
+  if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
+  return r.json();
+}
+async function sbAll(path) {
+  const out = [];
+  for (let off = 0; ; off += 1000) {
+    const rows = await sb(`${path}&limit=1000&offset=${off}`);
+    out.push(...rows);
+    if (rows.length < 1000) return out;
+  }
+}
+
+function man(v) {            // 万円 → "1억 3,980만 엔"
+  if (v == null) return "-";
+  v = Math.round(Number(v));
+  const oku = Math.floor(v / 10000), rest = v % 10000;
+  return (oku ? `${oku}억 ` : "") + (rest ? `${rest.toLocaleString()}만 ` : "") + "엔";
+}
+const yen = v => v == null ? "-" : `${Number(v).toLocaleString()}엔`;
+const rooms = l => { const m = /^(\d+)/.exec(l || ""); return m ? +m[1] : null; };
+const where = r => `${r.town || ""}${r.chome ? r.chome + "丁目" : ""}`;
+function unitLine(r) {
+  return [r.wing, r.floor != null ? `${r.floor}층` : null, r.layout, r.area_sqm ? `${Number(r.area_sqm)}㎡` : null,
+          r.orientation].filter(Boolean).join(" · ");
+}
+function delta(r) {
+  if (r.initial_price_man == null || r.price_man == null) return "";
+  const d = Number(r.price_man) - Number(r.initial_price_man);
+  if (!d) return "";
+  const pct = (d / Number(r.initial_price_man) * 100).toFixed(1);
+  return `<span class="delta ${d < 0 ? "down" : "up"}">${d < 0 ? "▼" : "▲"} ${man(Math.abs(d))} (${pct}%)</span>`;
+}
+
+// ---------------------------------------------------------------- state
+let ALL = [], shown = PAGE;
+const st = { areas: new Set(), rooms: new Set(), flags: new Set(), bldg: null };
+const FLAGS = [
+  ["new", "신착"], ["chg", "가격 변동"], ["sib", "같은 건물에 다른 매물"],
+  ["dup", "같은 호실 재등록"], ["gone", "종료된 매물 포함"],
+];
+
+function chip(box, key, label, set, n) {
+  const b = document.createElement("button");
+  b.className = "chip"; b.type = "button"; b.setAttribute("aria-pressed", "false");
+  b.innerHTML = esc(label) + (n != null ? `<small>${n}</small>` : "");
+  b.onclick = () => {
+    set.has(key) ? set.delete(key) : set.add(key);
+    b.setAttribute("aria-pressed", set.has(key)); shown = PAGE; render();
+  };
+  box.appendChild(b);
+}
+
+function buildFilters() {
+  const act = ALL.filter(r => r.is_active);
+  const ac = new Map();
+  for (const r of act) (r.area_codes || []).forEach((c, i) => {
+    const e = ac.get(c) || { name: r.area_names[i], n: 0 }; e.n++; ac.set(c, e);
+  });
+  [...ac.entries()].sort((a, b) => b[1].n - a[1].n)
+    .forEach(([c, e]) => chip($("#areas"), c, e.name, st.areas, e.n));
+  [[1, "1"], [2, "2"], [3, "3"], [4, "4 이상"]].forEach(([k, l]) => chip($("#rooms"), k, l, st.rooms));
+  FLAGS.forEach(([k, l]) => chip($("#flags"), k, l, st.flags));
+
+  const towns = new Map();
+  for (const r of act) if (r.town) towns.set(r.town, (towns.get(r.town) || 0) + 1);
+  $("#town").insertAdjacentHTML("beforeend", [...towns.entries()].sort((a, b) => b[1] - a[1])
+    .map(([t, n]) => `<option value="${esc(t)}">${esc(t)} (${n})</option>`).join(""));
+
+  for (const id of ["q", "pmin", "pmax", "amin", "amax", "ymin", "town", "sort"])
+    $("#" + id).addEventListener("input", () => { shown = PAGE; render(); });
+  $("#reset").onclick = () => {
+    for (const id of ["q", "pmin", "pmax", "amin", "amax", "ymin", "town"]) $("#" + id).value = "";
+    st.areas.clear(); st.rooms.clear(); st.flags.clear(); st.bldg = null;
+    document.querySelectorAll(".chip").forEach(c => c.setAttribute("aria-pressed", "false"));
+    shown = PAGE; render();
+  };
+  $("#scopeClear").onclick = () => { st.bldg = null; shown = PAGE; render(); };
+}
+
+function filtered() {
+  const q = $("#q").value.trim().toLowerCase();
+  const n = id => { const v = parseFloat($("#" + id).value); return isNaN(v) ? null : v; };
+  const pmin = n("pmin"), pmax = n("pmax"), amin = n("amin"), amax = n("amax"), ymin = n("ymin");
+  const town = $("#town").value;
+  const rows = ALL.filter(r => {
+    if (st.bldg) return r.bldg_code === st.bldg;          // 건물 보기는 종료 매물도 포함
+    if (!r.is_active && !st.flags.has("gone")) return false;
+    if (q && !`${r.bldg_name} ${r.address} ${r.route_summary || ""}`.toLowerCase().includes(q)) return false;
+    const p = Number(r.price_man) / 10000, a = Number(r.area_sqm);
+    if (pmin != null && !(p >= pmin)) return false;
+    if (pmax != null && !(p <= pmax)) return false;
+    if (amin != null && !(a >= amin)) return false;
+    if (amax != null && !(a <= amax)) return false;
+    if (ymin != null && !(r.completed_year >= ymin)) return false;
+    if (town && r.town !== town) return false;
+    if (st.areas.size && !(r.area_codes || []).some(c => st.areas.has(c))) return false;
+    if (st.rooms.size) { const k = rooms(r.layout); if (k == null || !st.rooms.has(Math.min(k, 4))) return false; }
+    if (st.flags.has("new") && !r.is_new) return false;
+    if (st.flags.has("chg") && !(r.is_price_changed || r.price_changes > 0)) return false;
+    if (st.flags.has("sib") && !r.has_other_listing_in_bldg) return false;
+    if (st.flags.has("dup") && !(r.same_unit_listings > 1)) return false;
+    return true;
+  });
+  const num = (v, d) => v == null ? d : Number(v);
+  const S = {
+    new: (a, b) => b.first_seen.localeCompare(a.first_seen) || (b.is_new - a.is_new) || b.prop_code.localeCompare(a.prop_code),
+    price_desc: (a, b) => num(b.price_man, 0) - num(a.price_man, 0),
+    price_asc: (a, b) => num(a.price_man, 1e12) - num(b.price_man, 1e12),
+    tsubo_asc: (a, b) => num(a.price_per_tsubo_man, 1e12) - num(b.price_per_tsubo_man, 1e12),
+    tsubo_desc: (a, b) => num(b.price_per_tsubo_man, 0) - num(a.price_per_tsubo_man, 0),
+    area_desc: (a, b) => num(b.area_sqm, 0) - num(a.area_sqm, 0),
+    year_desc: (a, b) => num(b.completed_ym, 0) - num(a.completed_ym, 0),
+  };
+  return rows.sort(S[$("#sort").value]);
+}
+
+function cardHTML(r) {
+  const badges = [
+    !r.is_active ? `<span class="badge gone">종료 ${esc(r.delisted_on)}</span>` : "",
+    r.is_new ? `<span class="badge new">신착</span>` : "",
+    r.is_price_changed ? `<span class="badge chg">가격 개정</span>` : "",
+  ].join("");
+  const sib = r.bldg_active_listings - (r.is_active ? 1 : 0);
+  return `<button class="card ${r.is_active ? "" : "gone"}" data-id="${r.id}">
+    <div class="thumb">${r.thumb ? `<img loading="lazy" referrerpolicy="no-referrer" alt="" src="${esc(img(r.thumb))}">` : ""}
+      <div class="badges">${badges}</div></div>
+    <div class="cbody">
+      <div class="cname">${esc(r.bldg_name)}</div>
+      <div class="cmeta">${esc(where(r))} · ${esc(unitLine(r))}</div>
+      <div class="price">${man(r.price_man)}${r.price_per_tsubo_man ? `<small>평당 ${Math.round(r.price_per_tsubo_man).toLocaleString()}만</small>` : ""}</div>
+      ${delta(r)}
+      <div class="cmeta">${r.completed_year ? `${r.completed_year}년 준공` : ""}${r.route_summary ? ` · ${esc(r.route_summary)}` : ""}</div>
+      <div class="tags">
+        ${sib > 0 ? `<span class="tag sib">같은 건물 +${sib}건</span>` : ""}
+        ${r.same_unit_listings > 1 ? `<span class="tag sib">같은 호실 재등록</span>` : ""}
+        ${(r.area_names || []).map(a => `<span class="tag">${esc(a)}</span>`).join("")}
+      </div>
+    </div></button>`;
+}
+
+function render() {
+  const rows = filtered();
+  const bl = new Set(rows.map(r => r.bldg_code)).size;
+  $("#count").innerHTML = `${rows.length.toLocaleString()}건<small>건물 ${bl.toLocaleString()}동</small>`;
+  const sc = $("#scope");
+  if (st.bldg) { sc.hidden = false; $("#scopeText").textContent = `${rows[0]?.bldg_name || ""} — 이 건물의 매물만 보는 중 (종료 포함)`; }
+  else sc.hidden = true;
+  $("#grid").innerHTML = rows.slice(0, shown).map(cardHTML).join("");
+  $("#after").innerHTML = !rows.length ? `<div class="empty">조건에 맞는 매물이 없습니다.</div>`
+    : rows.length > shown ? `<button class="more" id="more">더 보기 (${(rows.length - shown).toLocaleString()}건 남음)</button>` : "";
+  const m = $("#more"); if (m) m.onclick = () => { shown += PAGE; render(); };
+}
+
+// ---------------------------------------------------------------- detail
+const EV = { new: "첫 확인", price_change: "가격 변경", change: "정보 변경", relisted: "재등록", delisted: "게재 종료", detail_change: "상태 변경" };
+const FIELD = { price_man: "가격", admin_fee_yen: "관리비", area_sqm: "면적", layout: "방 구성", floor: "층", room_no: "호실", pending: "상태", occupancy: "현황", handover: "인도 시기", transaction_type: "거래 형태", repair_reserve_yen: "수선적립금", delisted_on: "종료일" };
+
+function changesText(e) {
+  if (e.event === "price_change" && e.prev_price_man != null)
+    return `${man(e.prev_price_man)} → ${man(e.price_man)}`;
+  if (!e.changes) return e.event === "new" || e.event === "delisted" ? man(e.price_man) : "";
+  return Object.entries(e.changes).map(([k, v]) =>
+    v && typeof v === "object" && "old" in v ? `${FIELD[k] || k}: ${esc(v.old ?? "-")} → ${esc(v.new ?? "-")}` : `${FIELD[k] || k}: ${esc(v)}`).join(", ");
+}
+
+async function openDetail(id) {
+  const r0 = ALL.find(r => r.id === id); if (!r0) return;
+  const dlg = $("#dlg");
+  $("#dlgc").innerHTML = `<div class="dhead"><div><h2>${esc(r0.bldg_name)}</h2><p>${esc(unitLine(r0))}</p></div><button data-close aria-label="닫기">✕</button></div><div class="dbody loading">불러오는 중…</div>`;
+  if (!dlg.open) dlg.showModal();
+  dlg.scrollTop = 0;
+  let d, events;
+  try {
+    [[d], events] = await Promise.all([
+      sb(`listings_enriched?id=eq.${id}&select=*`),
+      sb(`listing_events?listing_id=eq.${id}&select=*&order=observed_on,id`),
+    ]);
+  } catch (e) { $("#dlgc .dbody").textContent = "불러오지 못했습니다: " + e.message; return; }
+
+  const pics = [];
+  if (d.layout_image) pics.push({ url: d.layout_image, caption: "평면도", plan: true });
+  for (const p of d.images || []) pics.push(p);
+  const sibs = ALL.filter(r => r.bldg_code === d.bldg_code)
+    .sort((a, b) => (b.is_active - a.is_active) || (Number(b.floor) - Number(a.floor)));
+  const row = (k, v) => v == null || v === "" ? "" : `<tr><th>${k}</th><td>${v}</td></tr>`;
+  const list = a => a && a.length ? esc(a.join("、")) : "";
+  const floors = d.floors_above ? `지상 ${d.floors_above}층${d.floors_below ? ` / 지하 ${d.floors_below}층` : ""}` : "";
+  const monthly = (d.admin_fee_yen || 0) + (d.repair_reserve_yen || 0);
+
+  $("#dlgc").innerHTML = `
+  <div class="dhead"><div><h2>${esc(d.bldg_name)}</h2>
+    <p>${esc(d.address || "")} · ${esc(unitLine(d))}${d.room_no ? ` · ${esc(d.room_no)}호` : ""}</p></div>
+    <button data-close aria-label="닫기">✕</button></div>
+  <div class="dbody">
+    ${pics.length ? `<div class="gallery">${pics.map(p => `<figure><img loading="lazy" referrerpolicy="no-referrer" class="${p.plan ? "plan" : ""}" alt="" src="${esc(img(p.url))}"><figcaption>${esc((p.caption || "").split("※")[0])}</figcaption></figure>`).join("")}</div>` : ""}
+    <div class="dprice">${man(d.price_man)}</div>
+    <div>${delta(d)} ${d.is_active ? "" : `<span class="tag">게재 종료 ${esc(d.delisted_on)}</span>`}</div>
+    <div class="links">
+      <a href="${esc(SITE + d.url)}" target="_blank" rel="noopener noreferrer">원문 페이지 열기</a>
+      ${d.lat && d.lng ? `<a class="sec" href="https://www.google.com/maps/search/?api=1&query=${d.lat},${d.lng}" target="_blank" rel="noopener noreferrer">지도에서 보기</a>` : ""}
+    </div>
+
+    <h3>매물</h3>
+    <table class="spec">
+      ${row("평단가", d.price_per_tsubo_man ? `${Math.round(d.price_per_tsubo_man).toLocaleString()}만 엔 / 坪` : "")}
+      ${row("전용면적", d.area_sqm ? `${Number(d.area_sqm)}㎡ (${Number(d.area_tsubo)}坪)` : "")}
+      ${row("방 구성 · 방위", esc([d.layout, d.orientation].filter(Boolean).join(" · ")))}
+      ${row("층", d.floor != null ? `${d.floor}층${floors ? ` (${floors})` : ""}` : "")}
+      ${row("발코니", esc(d.balcony))}
+      ${row("관리비", d.admin_fee_yen != null ? `월 ${yen(d.admin_fee_yen)}` : "")}
+      ${row("수선적립금", d.repair_reserve_yen != null ? `월 ${yen(d.repair_reserve_yen)}` : "")}
+      ${row("월 고정비 합계", d.repair_reserve_yen != null && monthly ? `월 ${yen(monthly)} <span class="cmeta">(관리비+수선적립금)</span>` : "")}
+      ${row("기타 비용", esc(d.other_fee))}
+      ${row("현황 · 인도", esc([d.occupancy, d.handover].filter(Boolean).join(" · ")))}
+      ${row("주차장", esc(d.parking))}
+      ${row("거래 형태", esc(d.transaction_type))}
+      ${row("특징", list(d.features))}
+      ${row("실내 설비", list(d.equipment))}
+      ${row("비고", esc(d.remarks))}
+      ${row("정보 갱신일", esc(d.info_updated_on))}
+      ${row("처음 확인한 날", esc(d.first_seen))}
+    </table>
+    ${d.detail_fetched_at ? "" : `<p class="cmeta">상세 정보는 아직 수집되지 않았습니다.</p>`}
+
+    <h3>건물</h3>
+    <table class="spec">
+      ${row("세부 지역", esc((d.area_names || []).join(" / ")))}
+      ${row("교통", esc(d.access || d.route_summary))}
+      ${row("준공", d.completed_ym ? `${d.completed_ym.slice(0, 4)}년 ${+d.completed_ym.slice(4, 6) || ""}${+d.completed_ym.slice(4, 6) ? "월" : ""}` : "")}
+      ${row("구조 · 규모", esc([d.structure, floors, d.total_units ? `총 ${d.total_units}호` : null].filter(Boolean).join(" · ")))}
+      ${row("토지 권리", esc(d.land_right))}
+      ${row("분양 · 시공", esc([d.developer, d.builder].filter(Boolean).join(" / ")))}
+      ${row("관리", esc([d.mgmt_company, d.mgmt_type].filter(Boolean).join(" · ")))}
+      ${row("학군 (초등)", esc(d.school))}
+      ${row("공용 시설", list(d.facilities))}
+    </table>
+
+    <h3>변동 이력</h3>
+    <div class="wrapx"><table class="rows"><tr><th>날짜</th><th>구분</th><th>내용</th></tr>
+      ${events.map(e => `<tr><td>${esc(e.observed_on)}</td><td>${EV[e.event] || esc(e.event)}</td><td>${changesText(e)}</td></tr>`).join("")}
+    </table></div>
+
+    <h3>같은 건물의 매물 (${sibs.length}건${sibs.some(s => !s.is_active) ? ", 종료 포함" : ""})</h3>
+    <div class="wrapx"><table class="rows"><tr><th>층</th><th>방</th><th>면적</th><th>가격</th><th>평단가</th><th>상태</th></tr>
+      ${sibs.map(s => `<tr class="${s.id === d.id ? "cur" : "link"}" data-id="${s.id}">
+        <td>${s.floor ?? "-"}층</td><td>${esc(s.layout || "-")}</td><td>${s.area_sqm ? Number(s.area_sqm) + "㎡" : "-"}</td>
+        <td>${man(s.price_man)}</td><td>${s.price_per_tsubo_man ? Math.round(s.price_per_tsubo_man).toLocaleString() + "만" : "-"}</td>
+        <td>${s.id === d.id ? "지금 보는 매물" : s.is_active ? "게재 중" : "종료 " + esc(s.delisted_on)}</td></tr>`).join("")}
+    </table></div>
+  </div>`;
+}
+
+$("#grid").addEventListener("click", e => { const c = e.target.closest(".card"); if (c) openDetail(+c.dataset.id); });
+$("#dlg").addEventListener("click", e => {
+  if (e.target === $("#dlg") || e.target.closest("[data-close]")) return $("#dlg").close();
+  const tr = e.target.closest("tr.link"); if (tr) openDetail(+tr.dataset.id);
+});
+
+// ---------------------------------------------------------------- boot
+if (innerWidth < 700) document.querySelector(".filters").open = false;   // 폰에서는 접어 둔다
+(async () => {
+  try {
+    const [rows, runs] = await Promise.all([
+      sbAll(`listings_enriched?select=${LIST_COLS}&order=id`),
+      sb("scrape_runs?select=started_at&order=started_at.desc&limit=1"),
+    ]);
+    ALL = rows;
+    const act = rows.filter(r => r.is_active).length;
+    const when = runs[0] ? new Date(runs[0].started_at).toLocaleString("ko-KR", { dateStyle: "medium", timeStyle: "short" }) : "-";
+    $("#status").textContent = `게재 중 ${act.toLocaleString()}건 · 누적 ${rows.length.toLocaleString()}건 · 마지막 수집 ${when}`;
+    buildFilters(); render();
+  } catch (e) {
+    $("#status").textContent = "데이터를 불러오지 못했습니다.";
+    $("#grid").outerHTML = `<div class="empty">${esc(e.message)}</div>`;
+  }
+})();
+</script>
+</body>
+</html>
