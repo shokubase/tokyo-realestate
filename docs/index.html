@@ -517,7 +517,8 @@ let ALL = [], BUY = [], RENT = [], TX = null, shown = PAGE;   // ALL = 지금 �
 const BY = { buy: new Map(), rent: new Map() };                // 건물코드 → 게재 중 매물
 const st = { deal: "buy", areas: new Set(), rooms: new Set(), flags: new Set(), bldg: null,
              wards: new Set(),
-             towns: new Set(), limit: null, ai: "" };          // towns·limit·ai 는 AI 검색이 채운다
+             towns: new Set(), limit: null, ai: "",            // towns·limit·ai 는 AI 검색이 채운다
+             extra: [], sortBy: null };                        // AI가 지표로 만든 조건·정렬
 const INPUTS = ["q", "pmin", "pmax", "amin", "amax", "ymin", "yldmin", "yldmax", "town"];
 const other = () => st.deal === "buy" ? "rent" : "buy";
 const FLAGS = [
@@ -576,7 +577,7 @@ function buildFilters() {
   $("#reset").onclick = () => {
     for (const id of INPUTS) $("#" + id).value = "";
     st.areas.clear(); st.rooms.clear(); st.flags.clear(); st.bldg = null;
-    st.wards.clear(); st.towns.clear(); st.limit = null; st.ai = "";
+    st.wards.clear(); st.towns.clear(); st.limit = null; st.ai = ""; st.extra = []; st.sortBy = null;
     syncChips(); shown = PAGE; render();
   };
   $("#aiclear").onclick = () => $("#reset").click();
@@ -617,6 +618,10 @@ function filtered() {
     if (town && r.town !== town) return false;
     if (st.towns.size && !st.towns.has(r.town)) return false;
     if (st.wards.size && !st.wards.has(r.ward)) return false;
+    for (const x of st.extra) {                // 값이 없는 매물은 그 조건을 통과하지 못한다
+      const v = XF[x.field] && XF[x.field].get(r);
+      if (v == null || isNaN(v) || !OPS[x.op](Number(v), x.value)) return false;
+    }
     if (yl != null && !(r._y >= yl)) return false;
     if (yh != null && !(r._y <= yh)) return false;
     if (st.areas.size && !(r.area_codes || []).some(c => st.areas.has(c))) return false;
@@ -641,7 +646,14 @@ function filtered() {
     yield_desc: (a, b) => num(b._y, -1) - num(a._y, -1),       // 수익률을 모르는 매물은 뒤로
     yield_asc: (a, b) => num(a._y, 1e9) - num(b._y, 1e9),
   };
-  rows.sort(S[$("#sort").value] || S.new);
+  const sb2 = st.sortBy && XF[st.sortBy.field];
+  if (sb2) {                                   // AI가 지정한 지표 정렬 (값 없는 매물은 뒤로)
+    const dir = st.sortBy.dir === "asc" ? 1 : -1, g = sb2.get;
+    rows.sort((a, b) => {
+      const x = g(a), y = g(b);
+      return (x == null) - (y == null) || dir * (Number(x) - Number(y));
+    });
+  } else rows.sort(S[$("#sort").value] || S.new);
   return st.limit && !st.bldg ? rows.slice(0, st.limit) : rows;
 }
 
@@ -685,6 +697,7 @@ function cardHTML(r) {
       <div class="tags">
         ${sib > 0 ? `<span class="tag sib">같은 건물 +${sib}건</span>` : ""}
         ${crossTag(r)}
+        ${r._disc >= 10 ? `<span class="tag">동네 평단가보다 ${Math.round(r._disc)}% 낮음</span>` : ""}
         ${r.same_unit_listings > 1 ? `<span class="tag sib">같은 호실 재등록</span>` : ""}
         ${(r.area_names || []).map(a => `<span class="tag">${esc(a)}${koSpan(a)}</span>`).join("")}
       </div>
@@ -758,7 +771,10 @@ function render() {
   const bl = new Set(rows.map(r => r.bldg_code)).size;
   $("#count").innerHTML = `${rows.length.toLocaleString()}건<small>건물 ${bl.toLocaleString()}동</small>`;
   $("#aibar").hidden = !st.ai;
-  $("#aitext").textContent = st.ai ? `AI: ${st.ai}${st.limit ? ` (상위 ${st.limit}건)` : ""}` : "";
+  const xs = st.extra.map(extraText).filter(Boolean);
+  if (st.sortBy) xs.push(`정렬: ${XF[st.sortBy.field].label} ${st.sortBy.dir === "asc" ? "낮은순" : "높은순"}`);
+  $("#aitext").textContent = st.ai
+    ? `AI: ${st.ai}${st.limit ? ` (상위 ${st.limit}건)` : ""}${xs.length ? ` [적용한 추가 조건 — ${xs.join(" · ")}]` : ""}` : "";
   const sc = $("#scope");
   if (st.bldg) { sc.hidden = false; $("#scopeText").textContent = `${rows[0]?.bldg_name || ""} — 이 건물의 매물만 보는 중 (종료 포함)`; }
   else sc.hidden = true;
@@ -767,6 +783,55 @@ function render() {
     : rows.length > shown ? `<button class="more" id="more">더 보기 (${(rows.length - shown).toLocaleString()}건 남음)</button>` : "";
   const m = $("#more"); if (m) m.onclick = () => { shown += PAGE; render(); };
 }
+
+// ---------------------------------------------------------------- 비교 지표
+// 매물마다 "주변과 비교한 값"을 미리 계산해 둔다. AI 검색이 이 지표들을 조합해 조건을 만든다.
+function derive(rows) {
+  const med = a => { a = [...a].sort((x, y) => x - y); const m = a.length >> 1; return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; };
+  const band = r => BANDS.findIndex(([lo, hi]) => r.area_sqm >= lo && r.area_sqm < hi);
+  const push = (m, k, v) => (m.get(k) || m.set(k, []).get(k)).push(v);
+  const byTown = new Map(), byTownBand = new Map();
+  for (const r of rows) if (r.is_active && r.price_per_tsubo_man > 0 && r.town) {
+    const k = `${r.ward}/${r.town}`;
+    push(byTown, k, +r.price_per_tsubo_man); push(byTownBand, `${k}/${band(r)}`, +r.price_per_tsubo_man);
+  }
+  const townMed = new Map([...byTown].filter(([, a]) => a.length >= 5).map(([k, a]) => [k, med(a)]));
+  const tbMed = new Map([...byTownBand].filter(([, a]) => a.length >= 4).map(([k, a]) => [k, med(a)]));
+  const ranks = [...townMed.values()].sort((a, b) => a - b);
+  const year = new Date().getFullYear();
+  const pct = (v, m) => m && v > 0 ? Math.round((1 - v / m) * 1000) / 10 : null;
+  for (const r of rows) {
+    const k = `${r.ward}/${r.town}`, t = +r.price_per_tsubo_man, tm = townMed.get(k);
+    r._age = r.completed_year ? year - r.completed_year : null;
+    r._walk = (/徒歩\s*(\d+)\s*分/.exec(r.route_summary || "") || [])[1] ? +/徒歩\s*(\d+)\s*分/.exec(r.route_summary)[1] : null;
+    r._fee = r.admin_fee_yen == null && r.repair_reserve_yen == null ? null : ((r.admin_fee_yen || 0) + (r.repair_reserve_yen || 0)) / 10000;
+    r._disc = pct(t, tm);                                    // 같은 동네 평단가 중앙값보다 몇 % 싼가 (+면 쌈)
+    r._discBand = pct(t, tbMed.get(`${k}/${band(r)}`));      // 같은 동네·같은 평형대 기준
+    r._townRank = tm ? Math.round(ranks.filter(x => x <= tm).length / ranks.length * 100) : null;  // 동네 가격 순위 0~100
+    r._drop = r.initial_price_man > 0 ? Math.round((1 - r.price_man / r.initial_price_man) * 1000) / 10 : null;
+  }
+}
+// AI가 고를 수 있는 지표. label/unit 은 화면 표시용.
+const XF = {
+  price: { get: r => r.deal_type === "rent" ? +r.price_man : r.price_man / 10000, label: "가격", unit: "" },
+  area_sqm: { get: r => +r.area_sqm, label: "면적", unit: "㎡" },
+  tsubo_price: { get: r => +r.price_per_tsubo_man, label: "평단가", unit: "만 엔" },
+  built_year: { get: r => r.completed_year, label: "준공 연도", unit: "년" },
+  age_years: { get: r => r._age, label: "건물 나이", unit: "년" },
+  floor: { get: r => r.floor, label: "층", unit: "층" },
+  walk_min: { get: r => r._walk, label: "역 도보", unit: "분" },
+  total_units: { get: r => r.total_units, label: "총 세대수", unit: "호" },
+  yield_pct: { get: r => r._y, label: "예상 수익률", unit: "%" },
+  monthly_fee_man: { get: r => r._fee, label: "관리비+수선적립금", unit: "만 엔" },
+  discount_vs_town_pct: { get: r => r._disc, label: "같은 동네 평단가 대비 할인", unit: "%" },
+  discount_vs_town_band_pct: { get: r => r._discBand, label: "같은 동네·평형대 대비 할인", unit: "%" },
+  town_price_rank_pct: { get: r => r._townRank, label: "동네 가격 순위(100이 가장 비싼 동네)", unit: "" },
+  price_drop_pct: { get: r => r._drop, label: "첫 확인가 대비 인하", unit: "%" },
+  bldg_listings: { get: r => r.bldg_active_listings, label: "같은 건물 매물 수", unit: "건" },
+};
+const OPS = { ">=": (a, b) => a >= b, "<=": (a, b) => a <= b, "==": (a, b) => a === b };
+const OPTXT = { ">=": "이상", "<=": "이하", "==": "" };
+const extraText = x => XF[x.field] ? `${XF[x.field].label} ${x.value}${XF[x.field].unit} ${OPTXT[x.op] || ""}`.trim() : "";
 
 // ---------------------------------------------------------------- AI 검색
 // 질문을 중계 함수로 보내 검색 조건(JSON)을 받고, 그 조건을 화면의 필터에 그대로 채운다.
@@ -830,6 +895,8 @@ function applyQuery(q) {
   (q.rooms || []).forEach(k => st.rooms.add(Math.min(Math.max(Math.round(k), 1), 4)));
   const sort = st.deal === "rent" && String(q.sort).startsWith("yield") ? "new" : q.sort;
   if ($("#sort").querySelector(`[value="${sort}"]`)) $("#sort").value = sort;
+  st.extra = (q.extra || []).filter(x => XF[x.field] && OPS[x.op] && typeof x.value === "number");
+  st.sortBy = q.sort_field && XF[q.sort_field] ? { field: q.sort_field, dir: q.sort_dir === "asc" ? "asc" : "desc" } : null;
   st.limit = q.limit > 0 ? Math.round(q.limit) : null;
   st.ai = q.reply || "조건을 적용했습니다.";
   syncChips(); shown = PAGE; render(); showTab("list");
@@ -1293,6 +1360,7 @@ if (innerWidth < 480) document.querySelector(".filters").open = false;   // 폰�
       const seen = new Map(r.area_codes.map((c, i) => [c, r.area_names[i]]));
       r.area_codes = [...seen.keys()]; r.area_names = [...seen.values()];
     }
+    derive(BUY); derive(RENT);
     const act = a => a.filter(r => r.is_active).length.toLocaleString();
     const when = runs[0] ? new Date(runs[0].started_at).toLocaleString(LOCALE, { dateStyle: "medium", timeStyle: "short" }) : "-";
     // 마지막 수집일 하루 동안 새로 잡힌 매물과 사라진 매물 (매매+임대, 그날의 모든 실행 합계)
