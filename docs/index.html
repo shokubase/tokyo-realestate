@@ -12,13 +12,42 @@
   --accent: #1f4e79; --accent-soft: #e4edf5; --up: #b3261e; --down: #1a7f4b;
   --new: #b45309; --chip: #efede8; --shadow: 0 1px 2px rgba(0,0,0,.06), 0 4px 14px rgba(0,0,0,.05);
 }
+:root { color-scheme: light; }
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
     --bg: #151514; --card: #1f1f1d; --ink: #ecebe7; --muted: #a09c93; --line: #33322f;
     --accent: #8ab8e0; --accent-soft: #24313d; --up: #f28b82; --down: #6fcf97;
     --new: #f0b35a; --chip: #2a2a27; --shadow: 0 1px 2px rgba(0,0,0,.4);
   }
 }
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #151514; --card: #1f1f1d; --ink: #ecebe7; --muted: #a09c93; --line: #33322f;
+  --accent: #8ab8e0; --accent-soft: #24313d; --up: #f28b82; --down: #6fcf97;
+  --new: #f0b35a; --chip: #2a2a27; --shadow: 0 1px 2px rgba(0,0,0,.4);
+}
+.hrow { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+#theme { border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 6px 12px; cursor: pointer; font-size: 13px; white-space: nowrap; }
+.tabs { display: flex; gap: 4px; margin: 14px 0 0; border-bottom: 1px solid var(--line); }
+.tabs button { border: 0; background: none; padding: 9px 14px; cursor: pointer; font-weight: 600; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.sctl { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin: 14px 0 6px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+.seg button { border: 0; background: var(--card); padding: 7px 12px; cursor: pointer; font-size: 13px; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--card); }
+.snote { color: var(--muted); font-size: 13px; margin: 4px 0 14px; }
+.sgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 520px), 1fr)); gap: 14px; }
+.scard { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; box-shadow: var(--shadow); }
+.scard h3 { margin: 0 0 8px; font-size: 15px; }
+.scard h3 small { color: var(--muted); font-weight: 400; margin-left: 6px; }
+table.stat { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+table.stat th { color: var(--muted); font-weight: 500; font-size: 12px; text-align: right; padding: 4px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+table.stat td { text-align: right; padding: 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+table.stat th:first-child, table.stat td:first-child { text-align: left; padding-left: 0; }
+table.stat tr.link { cursor: pointer; } table.stat tr.link:hover td { color: var(--accent); }
+table.stat tr.tot td { font-weight: 700; border-bottom: 0; }
+table.stat td.med { font-weight: 700; }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html { -webkit-text-size-adjust: 100%; }
@@ -125,10 +154,29 @@ footer { text-align: center; color: var(--muted); font-size: 12px; padding: 0 16
 </head>
 <body>
 <header class="top">
-  <h1>도쿄 매물 트래커</h1>
+  <div class="hrow"><h1>도쿄 매물 트래커</h1><button id="theme" type="button"></button></div>
   <p id="status">불러오는 중…</p>
+  <nav class="tabs">
+    <button type="button" data-tab="list" aria-selected="true">매물</button>
+    <button type="button" data-tab="stats" aria-selected="false">시세 분석</button>
+  </nav>
 </header>
 <main>
+<section id="tab-stats" hidden>
+  <div class="sctl">
+    <div class="seg" id="sgroup">
+      <button type="button" data-v="area" aria-pressed="true">세부 지역별</button>
+      <button type="button" data-v="town" aria-pressed="false">동네(町)별</button>
+    </div>
+    <div class="seg" id="smetric">
+      <button type="button" data-v="price" aria-pressed="true">매매가</button>
+      <button type="button" data-v="tsubo" aria-pressed="false">평단가</button>
+    </div>
+  </div>
+  <p class="snote" id="snote"></p>
+  <div class="sgrid" id="sgrid"></div>
+</section>
+<section id="tab-list">
   <details class="filters" open>
     <summary>검색 조건 <span id="fsum"></span></summary>
     <div class="frow">
@@ -161,6 +209,7 @@ footer { text-align: center; color: var(--muted); font-size: 12px; padding: 0 16
   </div>
   <div id="grid" class="grid"></div>
   <div id="after"></div>
+</section>
 </main>
 <footer>가족용 개인 페이지입니다. 매물 정보의 출처와 권리는 각 게재처에 있으며, 실제 조건은 원문 페이지에서 확인하세요.</footer>
 
@@ -231,8 +280,11 @@ const FLAGS = [
   ["dup", "같은 호실 재등록"], ["gone", "종료된 매물 포함"],
 ];
 
+const CHIPS = [];
+const syncChips = () => CHIPS.forEach(c => c.b.setAttribute("aria-pressed", c.set.has(c.key)));
 function chip(box, key, label, set, n) {
   const b = document.createElement("button");
+  CHIPS.push({ b, key, set });
   b.className = "chip"; b.type = "button"; b.setAttribute("aria-pressed", "false");
   b.innerHTML = esc(label) + (n != null ? `<small>${n}</small>` : "");
   b.onclick = () => {
@@ -263,8 +315,7 @@ function buildFilters() {
   $("#reset").onclick = () => {
     for (const id of ["q", "pmin", "pmax", "amin", "amax", "ymin", "town"]) $("#" + id).value = "";
     st.areas.clear(); st.rooms.clear(); st.flags.clear(); st.bldg = null;
-    document.querySelectorAll(".chip").forEach(c => c.setAttribute("aria-pressed", "false"));
-    shown = PAGE; render();
+    syncChips(); shown = PAGE; render();
   };
   $("#scopeClear").onclick = () => { st.bldg = null; shown = PAGE; render(); };
 }
@@ -457,6 +508,93 @@ $("#dlg").addEventListener("click", e => {
   if (e.target === $("#dlg") || e.target.closest("[data-close]")) return $("#dlg").close();
   const tr = e.target.closest("tr.link"); if (tr) openDetail(+tr.dataset.id);
 });
+
+// ---------------------------------------------------------------- stats
+const BANDS = [[0, 50, "50㎡ 미만"], [50, 70, "50~70㎡"], [70, 100, "70~100㎡"], [100, 150, "100~150㎡"], [150, 1e9, "150㎡ 이상"]];
+const sst = { group: "area", metric: "price" };
+
+function agg(rows, f) {
+  const a = rows.map(f).filter(x => x > 0).sort((x, y) => x - y);
+  if (!a.length) return null;
+  const m = a.length >> 1;
+  return { n: a.length, avg: a.reduce((s, x) => s + x, 0) / a.length,
+           med: a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2, min: a[0], max: a[a.length - 1] };
+}
+
+function renderStats() {
+  const rows = ALL.filter(r => r.is_active && Number(r.area_sqm) > 0 && Number(r.price_man) > 0);
+  const groups = new Map([["__all", { name: "전체", rows }]]);
+  for (const r of rows) {
+    const keys = sst.group === "area" ? (r.area_codes || []).map((c, i) => [c, r.area_names[i]])
+                                      : r.town ? [[r.town, r.town]] : [];
+    for (const [k, name] of keys) {
+      if (!groups.has(k)) groups.set(k, { name, rows: [] });
+      groups.get(k).rows.push(r);
+    }
+  }
+  const price = sst.metric === "price";
+  const f = price ? r => Number(r.price_man) : r => Number(r.price_per_tsubo_man);
+  const fmt = price ? v => (v / 10000).toFixed(2) + "억" : v => Math.round(v).toLocaleString() + "만";
+  const cells = s => s ? `<td>${s.n}</td><td>${fmt(s.avg)}</td><td class="med">${fmt(s.med)}</td><td>${fmt(s.min)}</td><td>${fmt(s.max)}</td>` : "";
+
+  $("#snote").textContent = `게재 중인 매물 ${rows.length.toLocaleString()}건 기준, ${price ? "매매가(억 엔)" : "평단가(만 엔/坪)"}. `
+    + (sst.group === "area" ? "한 건물이 여러 세부 지역에 속하면 각각에 집계됩니다. " : "")
+    + "행을 누르면 해당 매물 목록으로 이동합니다. 호가 기준이며 건수가 적은 칸은 참고만 하세요.";
+
+  $("#sgrid").innerHTML = [...groups.entries()]
+    .sort((a, b) => (b[0] === "__all") - (a[0] === "__all") || b[1].rows.length - a[1].rows.length)
+    .map(([k, g]) => {
+      const body = BANDS.map(([lo, hi, label], i) => {
+        const s = agg(g.rows.filter(r => r.area_sqm >= lo && r.area_sqm < hi), f);
+        return s ? `<tr class="link" data-k="${esc(k)}" data-b="${i}"><td>${label}</td>${cells(s)}</tr>` : "";
+      }).join("");
+      return `<div class="scard"><h3>${esc(g.name)}<small>${g.rows.length}건</small></h3>
+        <div class="wrapx"><table class="stat">
+          <tr><th>전용면적</th><th>건수</th><th>평균</th><th>중앙값</th><th>최저</th><th>최대</th></tr>
+          ${body}
+          <tr class="tot link" data-k="${esc(k)}" data-b=""><td>전체</td>${cells(agg(g.rows, f))}</tr>
+        </table></div></div>`;
+    }).join("");
+}
+
+function showTab(name) {
+  document.querySelectorAll(".tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === name));
+  $("#tab-list").hidden = name !== "list";
+  $("#tab-stats").hidden = name !== "stats";
+  if (name === "stats") renderStats();
+}
+document.querySelector(".tabs").addEventListener("click", e => { const b = e.target.closest("button"); if (b) showTab(b.dataset.tab); });
+for (const [id, key] of [["sgroup", "group"], ["smetric", "metric"]])
+  $("#" + id).addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    sst[key] = b.dataset.v;
+    $("#" + id).querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b));
+    renderStats();
+  });
+// 분석 표의 행 → 같은 조건으로 매물 목록 열기
+$("#sgrid").addEventListener("click", e => {
+  const tr = e.target.closest("tr.link"); if (!tr) return;
+  $("#reset").click();
+  const k = tr.dataset.k, b = tr.dataset.b;
+  if (k !== "__all") { if (sst.group === "area") st.areas.add(k); else $("#town").value = k; }
+  if (b !== "") {
+    const [lo, hi] = BANDS[+b];
+    $("#amin").value = lo || ""; $("#amax").value = hi < 1e9 ? hi - 0.01 : "";
+  }
+  syncChips(); shown = PAGE; render(); showTab("list"); scrollTo(0, 0);
+});
+
+// ---------------------------------------------------------------- theme
+const store = { get: k => { try { return localStorage.getItem(k); } catch { return null; } },
+                set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
+function applyTheme(t) {
+  const sysDark = matchMedia("(prefers-color-scheme: dark)").matches;
+  if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
+  const dark = t ? t === "dark" : sysDark;
+  $("#theme").textContent = dark ? "☀ 라이트 모드" : "🌙 다크 모드";
+  $("#theme").onclick = () => { const n = dark ? "light" : "dark"; store.set("theme", n); applyTheme(n); };
+}
+applyTheme(store.get("theme"));
 
 // ---------------------------------------------------------------- boot
 if (innerWidth < 700) document.querySelector(".filters").open = false;   // 폰에서는 접어 둔다
