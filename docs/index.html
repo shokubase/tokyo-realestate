@@ -1227,9 +1227,6 @@ function showTab(name) {
 // Leaflet + OpenStreetMap. 지도 탭을 처음 열 때만 라이브러리를 불러온다.
 const LEAFLET = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/";
 let MAP = null, MAPL = null, MAPT = null, leafletP = null;
-const isDark = () => document.documentElement.dataset.theme
-  ? document.documentElement.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
-const mapTiles = () => `https://{s}.basemaps.cartocdn.com/${isDark() ? "dark_all" : "light_all"}/{z}/{x}/{y}{r}.png`;
 function loadLeaflet() {
   return leafletP ??= new Promise((ok, fail) => {
     const css = document.createElement("link"); css.rel = "stylesheet"; css.href = LEAFLET + "leaflet.min.css";
@@ -1250,12 +1247,13 @@ async function renderMap() {
   catch { $("#mapcount").textContent = "지도를 불러오지 못했습니다."; return; }
   if (!MAP) {
     MAP = L.map("map", { preferCanvas: true }).setView([35.663, 139.725], 13);
-    // CARTO 의 단색 지도(밝은/어두운 테마). 배경이 옅어서 매물 표시가 잘 보인다. 키·결제 불필요.
-    MAPT = L.tileLayer(mapTiles(), {
+    // 일본 국토지리원의 淡色地図. 철도와 역 이름이 또렷하고 배경이 옅다. 키·결제 불필요.
+    // (CARTO 단색 지도는 이제 API 키를 요구해서 쓰지 않는다.)
+    MAPT = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png", {
       // 페이지 전체는 no-referrer(매물 사진용)이므로 타일만 출처를 보내게 한다 (없으면 차단하는 서버가 있다)
       referrerPolicy: "strict-origin-when-cross-origin",
-      subdomains: "abcd", maxZoom: 20,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>' }).addTo(MAP);
+      maxNativeZoom: 18, maxZoom: 19,
+      attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a>' }).addTo(MAP);
     MAPL = L.layerGroup().addTo(MAP);
   }
   MAP.invalidateSize(); MAPL.clearLayers();
@@ -1454,9 +1452,7 @@ function applyTheme(t) {
   if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
   const dark = t ? t === "dark" : sysDark;
   $("#theme").textContent = dark ? "☀ 라이트 모드" : "🌙 다크 모드";
-  $("#theme").onclick = () => { const n = dark ? "light" : "dark"; store.set("theme", n); applyTheme(n); };
-  if (MAPT) MAPT.setUrl(mapTiles());            // 지도 배경도 테마에 맞춘다
-}
+  $("#theme").onclick = () => { const n = dark ? "light" : "dark"; store.set("theme", n); applyTheme(n); };}
 applyTheme(store.get("theme"));
 // ---------------------------------------------------------------- 찜
 // 가족이 공유한다. 누가 찜했는지는 각자 기기에서 한 번 입력한 이름으로 구분한다.
