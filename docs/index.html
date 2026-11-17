@@ -262,7 +262,10 @@ footer { text-align: center; color: var(--muted); font-size: 12px; padding: 0 16
       <button type="button" data-v="tx" aria-pressed="false">실거래가 (동네별)</button>
     </div>
     <div class="count" id="mapcount"></div>
-    <div><button type="button" id="mapfilter">검색 조건 바꾸기</button></div>
+    <div style="display:flex;gap:10px;align-items:center">
+      <label class="aiuse" style="margin:0"><input type="checkbox" id="maptone"> 배경 연하게</label>
+      <button type="button" id="mapfilter">검색 조건 바꾸기</button>
+    </div>
   </div>
   <div id="map"></div>
   <p class="snote" id="txnote" hidden>국토교통성이 공개한 중고 맨션 실거래가입니다(최근 4개 분기). 숫자는 그 동네의 평단가 중앙값(만 엔/坪)이고, 누르면 평형대별 가격과 분기별 추이, 현재 호가와의 차이가 나옵니다. 일본의 공개 자료에는 건물명과 정확한 위치가 없어 건물 단위가 아니라 동네 단위로만 볼 수 있습니다. 표시 위치는 그 동네 매물들의 평균 좌표입니다.</p>
@@ -1227,6 +1230,11 @@ function showTab(name) {
 // Leaflet + OpenStreetMap. 지도 탭을 처음 열 때만 라이브러리를 불러온다.
 const LEAFLET = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/";
 let MAP = null, MAPL = null, MAPT = null, leafletP = null;
+// "배경 연하게": 지도 타일의 색을 빼서 매물 표시가 더 잘 보이게 한다 (선택 사항, 기기에 기억)
+function applyMapTone() {
+  const on = $("#maptone").checked, pane = document.querySelector("#map .leaflet-tile-pane");
+  if (pane) pane.style.filter = on ? "saturate(.3) brightness(1.06) contrast(.92)" : "";
+}
 function loadLeaflet() {
   return leafletP ??= new Promise((ok, fail) => {
     const css = document.createElement("link"); css.rel = "stylesheet"; css.href = LEAFLET + "leaflet.min.css";
@@ -1247,13 +1255,13 @@ async function renderMap() {
   catch { $("#mapcount").textContent = "지도를 불러오지 못했습니다."; return; }
   if (!MAP) {
     MAP = L.map("map", { preferCanvas: true }).setView([35.663, 139.725], 13);
-    // 일본 국토지리원의 淡色地図. 철도와 역 이름이 또렷하고 배경이 옅다. 키·결제 불필요.
-    // (CARTO 단색 지도는 이제 API 키를 요구해서 쓰지 않는다.)
-    MAPT = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png", {
-      // 페이지 전체는 no-referrer(매물 사진용)이므로 타일만 출처를 보내게 한다 (없으면 차단하는 서버가 있다)
+    // OpenStreetMap 기본 지도. 키·결제 불필요.
+    // (써 본 대안: CARTO 단색 지도는 API 키를 요구하고, 국토지리원 淡色地図는 기호가 많아 더 복잡했다.)
+    MAPT = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      // OSM 은 출처(Referer) 없는 요청을 차단한다. 페이지 전체는 no-referrer(매물 사진용)라서 타일만 출처를 보낸다.
       referrerPolicy: "strict-origin-when-cross-origin",
-      maxNativeZoom: 18, maxZoom: 19,
-      attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a>' }).addTo(MAP);
+      maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }).addTo(MAP);
+    applyMapTone();
     MAPL = L.layerGroup().addTo(MAP);
   }
   MAP.invalidateSize(); MAPL.clearLayers();
@@ -1454,6 +1462,8 @@ function applyTheme(t) {
   $("#theme").textContent = dark ? "☀ 라이트 모드" : "🌙 다크 모드";
   $("#theme").onclick = () => { const n = dark ? "light" : "dark"; store.set("theme", n); applyTheme(n); };}
 applyTheme(store.get("theme"));
+$("#maptone").checked = store.get("maptone") === "1";
+$("#maptone").onchange = e => { store.set("maptone", e.target.checked ? "1" : "0"); applyMapTone(); };
 // ---------------------------------------------------------------- 찜
 // 가족이 공유한다. 누가 찜했는지는 각자 기기에서 한 번 입력한 이름으로 구분한다.
 // (접속 IP로는 같은 집 와이파이를 쓰는 가족을 구분할 수 없어서 이름을 쓴다.)
