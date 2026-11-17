@@ -162,6 +162,14 @@ table.stat td.diff { font-weight: 600; }
 .leaflet-popup-content .pm { color: #6f6b63; font-size: 12px; margin-bottom: 6px; }
 .leaflet-popup-content a { display: block; color: #1f4e79; text-decoration: none; padding: 3px 0; border-top: 1px solid #eee; }
 .leaflet-popup-content a:hover { text-decoration: underline; }
+.txpin { background: none; border: 0; }
+.txpin b { display: inline-block; transform: translate(-50%, -50%); white-space: nowrap; color: #fff; font: 700 12px/1 system-ui, sans-serif;
+  padding: 5px 7px; border-radius: 999px; border: 1.5px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.35); cursor: pointer; }
+.txpop table { border-collapse: collapse; width: 100%; font-size: 12px; margin-top: 6px; }
+.txpop th { text-align: right; color: #6f6b63; font-weight: 500; padding: 2px 4px; }
+.txpop td { text-align: right; padding: 3px 4px; border-top: 1px solid #eee; white-space: nowrap; }
+.txpop th:first-child, .txpop td:first-child { text-align: left; padding-left: 0; }
+.txpop svg { display: block; margin: 8px 0 2px; }
 .maplegend { white-space: nowrap; margin-left: 6px; }
 .maplegend i { display: inline-block; width: 16px; height: 10px; vertical-align: -1px; }
 .lout { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
@@ -177,6 +185,14 @@ table.stat td.diff { font-weight: 600; }
 .chat input { flex: 1; min-width: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
 .chat button { padding: 10px 16px; border: 0; border-radius: 10px; background: var(--accent); color: var(--card); font-weight: 600; cursor: pointer; white-space: nowrap; }
 .chat button:disabled { opacity: .6; cursor: wait; }
+.chat .deepbtn { background: var(--card); color: var(--accent); border: 1px solid var(--accent); }
+.deep { margin: 10px 0 0; padding: 14px 16px; border-radius: 12px; background: var(--card); border: 1px solid var(--accent); box-shadow: var(--shadow); }
+.deephead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.deephead button { border: 0; background: none; color: var(--accent); cursor: pointer; font-weight: 600; }
+#deeptext { white-space: pre-wrap; font-size: 14px; line-height: 1.65; }
+.deep details { margin-top: 10px; font-size: 12px; color: var(--muted); }
+.deep pre { white-space: pre-wrap; word-break: break-word; font-size: 11.5px; margin: 6px 0 0; max-height: 260px; overflow: auto; }
+@media (max-width: 560px) { .chat { flex-wrap: wrap; } .chat input { flex-basis: 100%; } .chat button { flex: 1; } }
 #aibar { margin: 10px 0 0; }
 .fav { position: absolute; top: 8px; right: 8px; z-index: 1; cursor: pointer; user-select: none; line-height: 1;
   background: rgba(255,255,255,.92); color: #c0392b; border-radius: 999px; padding: 5px 9px; font-size: 16px; }
@@ -224,18 +240,32 @@ footer { text-align: center; color: var(--muted); font-size: 12px; padding: 0 16
   <p>예상 수익률 = 같은 건물 임대 매물의 ㎡당 월 임대료 중앙값 × 이 매물의 면적 × 12개월 ÷ 매매가. 관리비·세금·공실을 빼지 않은 표면 수익률이고, 같은 건물에 임대 매물이 있을 때만 계산됩니다.</p>
   <nav class="tabs">
     <button type="button" data-tab="list" aria-selected="true">매물</button>
+    <button type="button" data-tab="fav" aria-selected="false">찜 <span id="favn"></span></button>
     <button type="button" data-tab="map" aria-selected="false">지도</button>
     <button type="button" data-tab="stats" aria-selected="false">시세 분석</button>
     <button type="button" data-tab="loan" aria-selected="false">대출 계산</button>
   </nav>
 </header>
 <main>
+<section id="tab-fav" hidden>
+  <div class="bar" style="margin-top:14px">
+    <div class="count" id="favcount"></div>
+    <div class="seg" id="favwho"></div>
+  </div>
+  <div id="favgrid" class="grid"></div>
+  <div id="favempty" class="empty" hidden></div>
+</section>
 <section id="tab-map" hidden>
   <div class="bar" style="margin-top:14px">
+    <div class="seg" id="maplayer">
+      <button type="button" data-v="listings" aria-pressed="true">매물</button>
+      <button type="button" data-v="tx" aria-pressed="false">실거래가 (동네별)</button>
+    </div>
     <div class="count" id="mapcount"></div>
     <div><button type="button" id="mapfilter">검색 조건 바꾸기</button></div>
   </div>
   <div id="map"></div>
+  <p class="snote" id="txnote" hidden>국토교통성이 공개한 중고 맨션 실거래가입니다(최근 4개 분기). 숫자는 그 동네의 평단가 중앙값(만 엔/坪)이고, 누르면 평형대별 가격과 분기별 추이, 현재 호가와의 차이가 나옵니다. 일본의 공개 자료에는 건물명과 정확한 위치가 없어 건물 단위가 아니라 동네 단위로만 볼 수 있습니다. 표시 위치는 그 동네 매물들의 평균 좌표입니다.</p>
   <p class="snote" id="mapnote">매물 탭에서 고른 매매/임대와 검색 조건이 그대로 적용됩니다. 원 하나가 건물 하나이고, 원이 클수록 그 건물의 매물이 많습니다. 색이 진할수록 평단가가 높습니다. 원을 누르면 매물 목록이 나옵니다. 위치는 사이트가 제공한 건물 좌표입니다.
     <span class="maplegend">낮음 <i style="background:#9ecae1"></i><i style="background:#6baed6"></i><i style="background:#3182bd"></i><i style="background:#08519c"></i><i style="background:#08306b"></i> 높음</span></p>
 </section>
@@ -289,7 +319,15 @@ footer { text-align: center; color: var(--muted); font-size: 12px; padding: 0 16
     <input id="chatq" type="text" maxlength="300" autocomplete="off"
            placeholder="AI에게 묻기 — 예: 아자부 80㎡ 근방 3억 이하, 평당 싼 순">
     <button type="submit">AI 검색</button>
+    <button type="button" id="deepbtn" class="deepbtn">깊이 분석</button>
   </form>
+  <p class="aiuse">AI 검색은 질문을 검색 조건으로 바꿔 줍니다(2~5초). 깊이 분석은 AI가 DB를 직접 조회해 글로 답합니다(10~40초).
+    <label><input type="checkbox" id="deepsonnet"> 깊이 분석을 더 정밀한 모델(Sonnet)로 — 비용 약 20배</label></p>
+  <div class="deep" id="deep" hidden>
+    <div class="deephead"><b>깊이 분석 결과</b><button type="button" id="deepclose">닫기</button></div>
+    <div id="deeptext"></div>
+    <details><summary>AI가 조회한 내역 보기</summary><pre id="deepsql"></pre></details>
+  </div>
   <p class="aiuse" id="aiuse"></p>
   <p class="aiuse" id="whoami" style="cursor:pointer"></p>
   <div class="scope" id="aibar" hidden><span id="aitext"></span><button type="button" id="aiclear">조건 지우기</button></div>
@@ -518,11 +556,11 @@ const BY = { buy: new Map(), rent: new Map() };                // 건물코드 �
 const st = { deal: "buy", areas: new Set(), rooms: new Set(), flags: new Set(), bldg: null,
              wards: new Set(),
              towns: new Set(), limit: null, ai: "",            // towns·limit·ai 는 AI 검색이 채운다
-             extra: [], sortBy: null };                        // AI가 지표로 만든 조건·정렬
+             extra: [], sortBy: null,                          // AI가 지표로 만든 조건·정렬
+             ids: null, deep: null };                          // 깊이 분석이 고른 매물과 답변
 const INPUTS = ["q", "pmin", "pmax", "amin", "amax", "ymin", "yldmin", "yldmax", "town"];
 const other = () => st.deal === "buy" ? "rent" : "buy";
 const FLAGS = [
-  ["fav", "찜한 매물만"], ["myfav", "내가 찜한 것만"],
   ["new", "신착"], ["chg", "가격 변동"], ["sib", "같은 건물에 다른 매물"],
   ["both", "같은 건물에 매매·임대 둘 다"],
   ["dup", "같은 호실 재등록"], ["gone", "종료된 매물 포함"], ["goneonly", "종료된 매물만 (팔렸을 가능성)"],
@@ -578,10 +616,15 @@ function buildFilters() {
     for (const id of INPUTS) $("#" + id).value = "";
     st.areas.clear(); st.rooms.clear(); st.flags.clear(); st.bldg = null;
     st.wards.clear(); st.towns.clear(); st.limit = null; st.ai = ""; st.extra = []; st.sortBy = null;
+    st.ids = null; st.deep = null;
     syncChips(); shown = PAGE; render();
   };
   $("#aiclear").onclick = () => $("#reset").click();
   $("#chat").addEventListener("submit", e => { e.preventDefault(); ask($("#chatq").value.trim()); });
+  $("#deepbtn").onclick = () => deepAsk($("#chatq").value.trim());
+  $("#deepclose").onclick = () => $("#reset").click();
+  $("#deepsonnet").checked = store.get("deepsonnet") === "1";
+  $("#deepsonnet").onchange = e => store.set("deepsonnet", e.target.checked ? "1" : "0");
   $("#scopeClear").onclick = () => { st.bldg = null; shown = PAGE; render(); };
 }
 
@@ -596,6 +639,10 @@ function setDeal(v) {
 }
 
 function filtered() {
+  if (st.ids) {                                  // 깊이 분석이 고른 매물: 다른 조건과 무관하게 그 순서대로
+    const m = new Map([...BUY, ...RENT].map(r => [r.id, r]));
+    return st.ids.map(i => m.get(i)).filter(Boolean);
+  }
   const q = $("#q").value.trim().toLowerCase();
   const n = id => { const v = parseFloat($("#" + id).value); return isNaN(v) ? null : v; };
   const pmin = n("pmin"), pmax = n("pmax"), amin = n("amin"), amax = n("amax"), ymin = n("ymin");
@@ -604,10 +651,7 @@ function filtered() {
   const rows = ALL.filter(r => {
     if (st.bldg) return r.bldg_code === st.bldg;          // 건물 보기는 종료 매물도 포함
     if (st.flags.has("goneonly")) { if (r.is_active) return false; }
-    else if (!r.is_active && !st.flags.has("gone") && !st.flags.has("fav") && !st.flags.has("myfav")) return false;
-    // 찜 필터는 종료된 매물도 함께 보여준다 (찜해 둔 매물이 사라졌는지 알 수 있게)
-    if (st.flags.has("fav") && !FAV.has(r.id)) return false;
-    if (st.flags.has("myfav") && !(FAV.get(r.id) || []).includes(WHO)) return false;
+    else if (!r.is_active && !st.flags.has("gone")) return false;
     if (q && !`${r.bldg_name} ${r.address} ${r.route_summary || ""}`.toLowerCase().includes(q)) return false;
     const p = Number(r.price_man) / (st.deal === "rent" ? 1 : 10000), a = Number(r.area_sqm);
     if (pmin != null && !(p >= pmin)) return false;
@@ -764,8 +808,13 @@ function recHTML({ r, why, warn }, i) {
 
 function render() {
   const rows = filtered();
+  $("#deep").hidden = !st.deep;
+  if (st.deep) {
+    $("#deeptext").textContent = st.deep.answer;
+    $("#deepsql").textContent = (st.deep.queries || []).map((x, i) => `-- ${i + 1}${x.ok ? "" : " (오류 → 다시 시도함)"}\n${x.sql}`).join("\n\n");
+  }
   const placed = st.areas.size || st.towns.size || st.wards.size || $("#town").value;
-  const rec = placed && !st.bldg && !st.limit ? recommend(rows) : [];
+  const rec = placed && !st.bldg && !st.limit && !st.ids ? recommend(rows) : [];
   $("#rec").hidden = !rec.length;
   $("#recrow").innerHTML = rec.map(recHTML).join("");
   const bl = new Set(rows.map(r => r.bldg_code)).size;
@@ -878,6 +927,38 @@ async function ask(question) {
     btn.disabled = false; btn.textContent = "AI 검색";
   }
 }
+// 깊이 분석: AI가 DB를 직접 여러 번 조회해 답한다 (10~30초). 답변 글과 함께 고른 매물을 목록에 띄운다.
+async function deepAsk(question) {
+  if (!question) { $("#chatq").focus(); return; }
+  const pw = store.get("chatpw") || prompt(tr("가족 비밀번호를 입력하세요"));
+  if (!pw) return;
+  const btn = $("#deepbtn");
+  btn.disabled = true; btn.textContent = "분석 중… (최대 1분)";
+  try {
+    const r = await fetch(`${SB_URL}/functions/v1/analyze`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: pw, question, lang: LANG, model: $("#deepsonnet").checked ? "sonnet" : "haiku" }),
+    });
+    const j = await r.json();
+    showUsage(j.stats);
+    $("#reset").click();
+    if (j.error) {
+      if (j.error === "bad_password") store.set("chatpw", "");
+      st.ai = j.error === "too_long" ? "조회가 너무 길어져 답을 내지 못했습니다. 질문을 나눠서 다시 물어봐 주세요."
+            : CHAT_ERR[j.error] || `오류가 났습니다 (${j.error}).`;
+      return render();
+    }
+    store.set("chatpw", pw);
+    st.deep = { answer: j.answer, queries: j.queries };
+    st.ids = j.ids && j.ids.length ? j.ids : null;
+    shown = PAGE; render(); showTab("list");
+  } catch (e) {
+    st.ai = "연결에 실패했습니다. 잠시 후 다시 시도해 주세요."; render();
+  } finally {
+    btn.disabled = false; btn.textContent = "깊이 분석";
+  }
+}
+
 function applyQuery(q) {
   if (!q.understood) { st.ai = q.reply; st.limit = null; return render(); }
   setDeal(q.deal === "rent" ? "rent" : "buy");                 // 기존 조건 초기화 포함
@@ -1055,13 +1136,19 @@ function agg(rows, f) {
            med: a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2, min: a[0], max: a[a.length - 1] };
 }
 
+// 실거래가(국토교통성)는 필요할 때 한 번만 받아 둔다
+let txP = null;
+function loadTx() {
+  return txP ??= sbAll("transactions?select=ward,town,period,price_man,area_sqm,built_year&order=id")
+    .then(rows => { TX = rows; }).catch(() => { TX = []; });
+}
+
 async function renderStats() {
   const M = METRIC[sst.metric];
   $("#speriod").hidden = !M.tx;
   if (M.tx && !TX) {
     $("#sgrid").innerHTML = `<div class="loading">실거래가를 불러오는 중…</div>`;
-    try { TX = await sbAll("transactions?select=ward,town,period,price_man,area_sqm&order=id"); }
-    catch (e) { TX = []; }
+    await loadTx();
     if (METRIC[sst.metric] !== M) return renderStats();
   }
   const rows = (M.deal === "buy" ? BUY : RENT)
@@ -1129,7 +1216,8 @@ async function renderStats() {
 
 function showTab(name) {
   document.querySelectorAll(".tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === name));
-  for (const t of ["list", "map", "stats", "loan"]) $("#tab-" + t).hidden = name !== t;
+  for (const t of ["list", "fav", "map", "stats", "loan"]) $("#tab-" + t).hidden = name !== t;
+  if (name === "fav") renderFav();
   if (name === "stats") renderStats();
   if (name === "loan") renderLoan();
   if (name === "map") renderMap();
@@ -1164,6 +1252,9 @@ async function renderMap() {
     MAPL = L.layerGroup().addTo(MAP);
   }
   MAP.invalidateSize(); MAPL.clearLayers();
+  const tx = mapLayer === "tx";
+  $("#mapnote").hidden = tx; $("#txnote").hidden = !tx; $("#mapfilter").hidden = tx;
+  if (tx) return renderTxMap();
   const rows = filtered().filter(r => r.lat && r.lng);
   const g = new Map();
   for (const r of rows) (g.get(r.bldg_code) || g.set(r.bldg_code, []).get(r.bldg_code)).push(r);
@@ -1184,9 +1275,90 @@ async function renderMap() {
   if (pts.length) MAP.fitBounds(pts, { padding: [30, 30], maxZoom: 16 });
   $("#mapcount").innerHTML = `${st.deal === "rent" ? "임대" : "매매"} ${rows.length.toLocaleString()}건<small>건물 ${g.size.toLocaleString()}동</small>`;
 }
+// ---- 실거래가 지도: 동네마다 평단가 중앙값을 말풍선으로 띄운다
+let mapLayer = "listings", txFit = false;
+const median = a => { a = [...a].sort((x, y) => x - y); const m = a.length >> 1; return a.length ? (a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2) : null; };
+const txTsubo = t => t.price_man / (t.area_sqm / TSUBO);
+async function renderTxMap() {
+  $("#mapcount").textContent = "실거래가를 불러오는 중…";
+  await loadTx();
+  if (mapLayer !== "tx") return;
+  // 동네 위치: 그 동네에 있는 매물(건물)들의 평균 좌표
+  const pos = new Map();
+  for (const r of [...BUY, ...RENT]) if (r.lat && r.lng && r.town) {
+    const k = `${r.ward}/${r.town}`, p = pos.get(k) || pos.set(k, { lat: 0, lng: 0, n: 0 }).get(k);
+    p.lat += +r.lat; p.lng += +r.lng; p.n++;
+  }
+  const periods = [...new Set(TX.map(t => t.period))].sort((a, b) => b - a);
+  const recent = new Set(periods.slice(0, 4));
+  const byTown = new Map();
+  for (const t of TX) if (t.area_sqm > 0 && t.price_man > 0) {
+    const k = `${t.ward}/${t.town}`;
+    (byTown.get(k) || byTown.set(k, []).get(k)).push(t);
+  }
+  const towns = [];
+  for (const [k, all] of byTown) {
+    const rs = all.filter(t => recent.has(t.period)), p = pos.get(k);
+    if (!p || rs.length < 5) continue;                           // 위치를 모르거나 거래가 너무 적은 동네는 뺀다
+    towns.push({ k, all, rs, lat: p.lat / p.n, lng: p.lng / p.n, med: median(rs.map(txTsubo)) });
+  }
+  const ms = towns.map(t => t.med).sort((a, b) => a - b);
+  const cuts = [.2, .4, .6, .8].map(q => ms[Math.min(ms.length - 1, Math.floor(ms.length * q))] || 0);
+  MAPL.clearLayers();
+  for (const t of towns) {
+    const col = MAPCOL[cuts.filter(c => t.med > c).length];
+    L.marker([t.lat, t.lng], { icon: L.divIcon({ className: "txpin", html: `<b style="background:${col}">${Math.round(t.med).toLocaleString()}</b>`, iconSize: [0, 0] }) })
+      .bindPopup(() => txPopupHTML(t, periods), { maxWidth: 340 }).addTo(MAPL);
+  }
+  if (towns.length && !txFit) { MAP.fitBounds(towns.map(t => [t.lat, t.lng]), { padding: [30, 30] }); txFit = true; }
+  const n = towns.reduce((s, t) => s + t.rs.length, 0);
+  $("#mapcount").innerHTML = `실거래 ${n.toLocaleString()}건<small>동네 ${towns.length}곳 · 최근 4개 분기</small>`;
+}
+function txPopupHTML(t, periods) {
+  const [ward, town] = t.k.split("/");
+  const rowsHTML = BANDS.map(([lo, hi, label]) => {
+    const g = t.rs.filter(x => x.area_sqm >= lo && x.area_sqm < hi);
+    return g.length ? `<tr><td>${label}</td><td>${g.length}</td><td>${(median(g.map(x => +x.price_man)) / 10000).toFixed(2)}억</td><td>${Math.round(median(g.map(txTsubo))).toLocaleString()}만</td></tr>` : "";
+  }).join("");
+  // 분기별 평단가 중앙값 추이 (거래 3건 이상인 분기만)
+  const qs = [...periods].reverse().map(p => {
+    const g = t.all.filter(x => x.period === p); return g.length >= 3 ? { p, v: median(g.map(txTsubo)) } : null;
+  }).filter(Boolean);
+  let spark = "";
+  if (qs.length >= 3) {
+    const lo = Math.min(...qs.map(q => q.v)), hi = Math.max(...qs.map(q => q.v)), W = 300, H = 46;
+    const pt = (q, i) => `${(i / (qs.length - 1) * (W - 8) + 4).toFixed(1)},${(H - 6 - (hi === lo ? .5 : (q.v - lo) / (hi - lo)) * (H - 12)).toFixed(1)}`;
+    const lab = p => `${String(Math.floor(p / 10)).slice(2)}.${p % 10}Q`;
+    spark = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><polyline fill="none" stroke="#1f4e79" stroke-width="2" points="${qs.map(pt).join(" ")}"/>
+      ${qs.map((q, i) => `<circle cx="${pt(q, i).split(",")[0]}" cy="${pt(q, i).split(",")[1]}" r="2.5" fill="#1f4e79"/>`).join("")}</svg>
+      <div class="pm">분기별 평단가: ${lab(qs[0].p)} ${Math.round(qs[0].v).toLocaleString()}만 → ${lab(qs[qs.length - 1].p)} ${Math.round(qs[qs.length - 1].v).toLocaleString()}만</div>`;
+  }
+  const ask = BUY.filter(r => r.is_active && r.ward === ward && r.town === town && r.price_per_tsubo_man > 0).map(r => +r.price_per_tsubo_man);
+  const am = ask.length >= 3 ? median(ask) : null;
+  return `<div class="txpop"><b class="pn">${esc(town)}</b>${koSpan(town)} <span class="pm">${esc(ward)}</span>
+    <div class="pm">최근 4개 분기 실거래 ${t.rs.length}건 · 평단가 중앙값 ${Math.round(t.med).toLocaleString()}만 엔</div>
+    <table><tr><th>전용면적</th><th>건수</th><th>가격 중앙값</th><th>평단가</th></tr>${rowsHTML}</table>
+    ${spark}
+    ${am ? `<div class="pm">현재 매매 호가 ${ask.length}건의 평단가 중앙값 ${Math.round(am).toLocaleString()}만 엔 (실거래 대비 ${am >= t.med ? "+" : ""}${Math.round((am / t.med - 1) * 100)}%)</div>
+      <a href="#" data-town="${esc(t.k)}">이 동네 매매 매물 보기</a>` : `<div class="pm">이 동네의 현재 매매 호가는 3건 미만입니다.</div>`}</div>`;
+}
+$("#maplayer").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  mapLayer = b.dataset.v;
+  $("#maplayer").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b));
+  renderMap();
+});
 $("#mapfilter").onclick = () => showTab("list");
 $("#map").addEventListener("click", e => {
-  const a = e.target.closest("[data-id]"); if (a) { e.preventDefault(); openDetail(+a.dataset.id); }
+  const a = e.target.closest("[data-id]"); if (a) { e.preventDefault(); return openDetail(+a.dataset.id); }
+  const tw = e.target.closest("[data-town]");
+  if (tw) {                                       // 실거래 말풍선 → 그 동네의 매매 매물 목록으로
+    e.preventDefault();
+    const [ward, town] = tw.dataset.town.split("/");
+    setDeal("buy"); st.wards.add(ward);
+    if ([...$("#town").options].some(o => o.value === town)) $("#town").value = town; else st.towns.add(town);
+    syncChips(); shown = PAGE; render(); showTab("list"); scrollTo(0, 0);
+  }
 });
 
 // ---------------------------------------------------------------- 대출 계산
@@ -1292,6 +1464,8 @@ async function rpc(fn, body) {
 function setFavs(list) {
   FAV.clear();
   for (const f of list) (FAV.get(f.listing_id) || FAV.set(f.listing_id, []).get(f.listing_id)).push(f.who);
+  $("#favn").textContent = FAV.size ? FAV.size : "";
+  if (!$("#tab-fav").hidden) renderFav();
 }
 function showWho() {
   $("#whoami").textContent = WHO ? `찜 이름: ${WHO} (눌러서 바꾸기)` : "";
@@ -1318,6 +1492,35 @@ async function toggleFav(id) {
   store.set("chatpw", pw); setFavs(l); showWho(); render();
   document.querySelectorAll(`#dlg [data-fav="${id}"]`).forEach(el => el.outerHTML = favHTML(id));
 }
+// 찜 탭: 가족이 찜한 매물을 한곳에 모아 본다 (종료된 매물 포함). 사람별로 좁혀 볼 수 있다.
+let favWho = "";                                  // "" = 전체
+function renderFav() {
+  const names = [...new Set([...FAV.values()].flat())];
+  $("#favn").textContent = FAV.size ? FAV.size : "";
+  if (favWho && !names.includes(favWho)) favWho = "";
+  $("#favwho").innerHTML = [["", "전체"], ...names.map(n => [n, n])].map(([v, l]) =>
+    `<button type="button" data-v="${esc(v)}" aria-pressed="${v === favWho}">${esc(l)}</button>`).join("");
+  $("#favwho").hidden = names.length < 2;
+  const all = new Map([...BUY, ...RENT].map(r => [r.id, r]));
+  const rows = [...FAV.entries()].filter(([, w]) => !favWho || w.includes(favWho))
+    .map(([id]) => all.get(id)).filter(Boolean).reverse();          // 최근에 찜한 것부터
+  $("#favcount").innerHTML = `찜한 매물 ${rows.length}건` + (rows.some(r => !r.is_active) ? `<small>종료된 매물 포함</small>` : "");
+  $("#favgrid").innerHTML = rows.map(cardHTML).join("");
+  const e = $("#favempty");
+  e.hidden = rows.length > 0;
+  e.innerHTML = store.get("chatpw") ? "아직 찜한 매물이 없습니다. 매물 사진 오른쪽 위의 ♡를 눌러 보세요."
+    : `찜 목록은 가족 비밀번호를 입력해야 보입니다. <button type="button" class="more" id="favlogin">비밀번호 입력</button>`;
+  const b = $("#favlogin");
+  if (b) b.onclick = async () => {
+    const pw = prompt(tr("가족 비밀번호를 입력하세요")); if (!pw) return;
+    const l = await rpc("fav_list", { p_password: pw }).catch(() => null);
+    if (!l) return alert(tr("비밀번호가 맞지 않습니다. 다시 시도해 주세요."));
+    store.set("chatpw", pw); setFavs(l); render(); renderFav();
+  };
+}
+$("#favwho").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { favWho = b.dataset.v; renderFav(); } });
+$("#favgrid").addEventListener("click", e => { if (favClick(e)) return; const c = e.target.closest(".card"); if (c) openDetail(+c.dataset.id); });
+
 function favHTML(id) {
   const w = FAV.get(id) || [], mine = WHO && w.includes(WHO);
   return `<span class="fav ${mine ? "on" : ""}" role="button" tabindex="0" data-fav="${id}" aria-label="찜">${mine ? "♥" : "♡"}${w.length ? `<small>${esc(w.join(", "))}</small>` : ""}</span>`;
