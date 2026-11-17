@@ -170,6 +170,11 @@ table.stat td.diff { font-weight: 600; }
 .chat button { padding: 10px 16px; border: 0; border-radius: 10px; background: var(--accent); color: var(--card); font-weight: 600; cursor: pointer; white-space: nowrap; }
 .chat button:disabled { opacity: .6; cursor: wait; }
 #aibar { margin: 10px 0 0; }
+.fav { position: absolute; top: 8px; right: 8px; z-index: 1; cursor: pointer; user-select: none; line-height: 1;
+  background: rgba(255,255,255,.92); color: #c0392b; border-radius: 999px; padding: 5px 9px; font-size: 16px; }
+.fav small { font-size: 11px; color: #333; margin-left: 4px; font-weight: 600; vertical-align: 1px; }
+.fav:hover { background: #fff; }
+.links .fav { position: static; border: 1px solid var(--line); padding: 7px 12px; }
 .aiuse { margin: 5px 2px 0; font-size: 12px; color: var(--muted); min-height: 1em; }
 .empty, .loading { text-align: center; color: var(--muted); padding: 60px 0; }
 .more { display: block; margin: 20px auto 0; padding: 10px 22px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); cursor: pointer; }
@@ -268,6 +273,7 @@ footer { text-align: center; color: var(--muted); font-size: 12px; padding: 0 16
     <button type="submit">AI 검색</button>
   </form>
   <p class="aiuse" id="aiuse"></p>
+  <p class="aiuse" id="whoami" style="cursor:pointer"></p>
   <div class="scope" id="aibar" hidden><span id="aitext"></span><button type="button" id="aiclear">조건 지우기</button></div>
   <details class="filters" open>
     <summary>검색 조건 <span id="fsum"></span></summary>
@@ -497,6 +503,7 @@ const st = { deal: "buy", areas: new Set(), rooms: new Set(), flags: new Set(), 
 const INPUTS = ["q", "pmin", "pmax", "amin", "amax", "ymin", "yldmin", "yldmax", "town"];
 const other = () => st.deal === "buy" ? "rent" : "buy";
 const FLAGS = [
+  ["fav", "찜한 매물만"], ["myfav", "내가 찜한 것만"],
   ["new", "신착"], ["chg", "가격 변동"], ["sib", "같은 건물에 다른 매물"],
   ["both", "같은 건물에 매매·임대 둘 다"],
   ["dup", "같은 호실 재등록"], ["gone", "종료된 매물 포함"], ["goneonly", "종료된 매물만 (팔렸을 가능성)"],
@@ -578,7 +585,10 @@ function filtered() {
   const rows = ALL.filter(r => {
     if (st.bldg) return r.bldg_code === st.bldg;          // 건물 보기는 종료 매물도 포함
     if (st.flags.has("goneonly")) { if (r.is_active) return false; }
-    else if (!r.is_active && !st.flags.has("gone")) return false;
+    else if (!r.is_active && !st.flags.has("gone") && !st.flags.has("fav") && !st.flags.has("myfav")) return false;
+    // 찜 필터는 종료된 매물도 함께 보여준다 (찜해 둔 매물이 사라졌는지 알 수 있게)
+    if (st.flags.has("fav") && !FAV.has(r.id)) return false;
+    if (st.flags.has("myfav") && !(FAV.get(r.id) || []).includes(WHO)) return false;
     if (q && !`${r.bldg_name} ${r.address} ${r.route_summary || ""}`.toLowerCase().includes(q)) return false;
     const p = Number(r.price_man) / (st.deal === "rent" ? 1 : 10000), a = Number(r.area_sqm);
     if (pmin != null && !(p >= pmin)) return false;
@@ -645,7 +655,7 @@ function cardHTML(r) {
   const sib = r.bldg_active_listings - (r.is_active ? 1 : 0);
   return `<button class="card ${r.is_active ? "" : "gone"}" data-id="${r.id}">
     <div class="thumb"><img loading="lazy" referrerpolicy="no-referrer" alt="" src="${esc(img(r.thumb || bldgPhoto(r.bldg_code)))}" data-fb="${esc(img(r.layout_image))}">
-      <div class="badges">${badges}${r.thumb ? "" : `<span class="badge">건물 사진</span>`}</div></div>
+      <div class="badges">${badges}${r.thumb ? "" : `<span class="badge">건물 사진</span>`}</div>${favHTML(r.id)}</div>
     <div class="cbody">
       <div class="cname">${esc(r.bldg_name)}</div>
       <div class="cmeta">${esc(where(r))}${koSpan(r.town)} · ${esc(unitLine(r))}</div>
@@ -711,7 +721,7 @@ function recommend(rows) {
 function recHTML({ r, why, warn }, i) {
   return `<button class="reccard" data-id="${r.id}">
     <div class="thumb"><img loading="lazy" referrerpolicy="no-referrer" alt="" src="${esc(img(r.thumb || bldgPhoto(r.bldg_code)))}" data-fb="${esc(img(r.layout_image))}">
-      <div class="badges"><span class="badge rec">추천 ${i + 1}</span></div></div>
+      <div class="badges"><span class="badge rec">추천 ${i + 1}</span></div>${favHTML(r.id)}</div>
     <div class="rb">
       <div class="cname">${esc(r.bldg_name)}</div>
       <div class="cmeta">${esc(where(r))}${koSpan(r.town)} · ${esc(unitLine(r))}${r.completed_year ? ` · ${r.completed_year}년 준공` : ""}</div>
@@ -865,6 +875,7 @@ async function openDetail(id) {
       <a href="${esc(SITE + d.url)}" target="_blank" rel="noopener noreferrer">원문 페이지 열기</a>
       ${d.lat && d.lng ? `<a class="sec" href="https://www.google.com/maps/search/?api=1&query=${d.lat},${d.lng}" target="_blank" rel="noopener noreferrer">지도에서 보기</a>` : ""}
       ${isRent ? "" : `<a class="sec" href="#" data-loan="${d.id}">대출 계산</a>`}
+      ${favHTML(d.id)}
     </div>
 
     <h3>같은 건물의 ${isRent ? "매매" : "임대"} 매물 (${cross.length}건)</h3>
@@ -927,9 +938,11 @@ document.addEventListener("error", e => {
   else (i.closest("figure") || i).style.display = "none";
 }, true);
 
-$("#grid").addEventListener("click", e => { const c = e.target.closest(".card"); if (c) openDetail(+c.dataset.id); });
-$("#recrow").addEventListener("click", e => { const c = e.target.closest(".reccard"); if (c) openDetail(+c.dataset.id); });
+const favClick = e => { const f = e.target.closest("[data-fav]"); if (f) { e.preventDefault(); toggleFav(+f.dataset.fav); } return !!f; };
+$("#grid").addEventListener("click", e => { if (favClick(e)) return; const c = e.target.closest(".card"); if (c) openDetail(+c.dataset.id); });
+$("#recrow").addEventListener("click", e => { if (favClick(e)) return; const c = e.target.closest(".reccard"); if (c) openDetail(+c.dataset.id); });
 $("#dlg").addEventListener("click", e => {
+  if (favClick(e)) return;
   if (e.target === $("#dlg") || e.target.closest("[data-close]")) return $("#dlg").close();
   const ln = e.target.closest("[data-loan]"); if (ln) { e.preventDefault(); return loanFrom(+ln.dataset.loan); }
   const tr = e.target.closest("tr.link"); if (tr) openDetail(+tr.dataset.id);
@@ -1125,6 +1138,52 @@ function applyTheme(t) {
   $("#theme").onclick = () => { const n = dark ? "light" : "dark"; store.set("theme", n); applyTheme(n); };
 }
 applyTheme(store.get("theme"));
+// ---------------------------------------------------------------- 찜
+// 가족이 공유한다. 누가 찜했는지는 각자 기기에서 한 번 입력한 이름으로 구분한다.
+// (접속 IP로는 같은 집 와이파이를 쓰는 가족을 구분할 수 없어서 이름을 쓴다.)
+const FAV = new Map();                         // listing id → [이름, …]
+let WHO = store.get("who") || "";
+async function rpc(fn, body) {
+  const r = await fetch(`${SB_URL}/rest/v1/rpc/${fn}`, {
+    method: "POST", headers: { apikey: SB_KEY, "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!r.ok) throw new Error(`${r.status}`);
+  return r.json();
+}
+function setFavs(list) {
+  FAV.clear();
+  for (const f of list) (FAV.get(f.listing_id) || FAV.set(f.listing_id, []).get(f.listing_id)).push(f.who);
+}
+function showWho() {
+  $("#whoami").textContent = WHO ? `찜 이름: ${WHO} (눌러서 바꾸기)` : "";
+}
+$("#whoami").onclick = () => {
+  const n = (prompt(tr("찜에 표시할 이름을 입력하세요 (예: 아빠, 엄마)"), WHO) || "").trim().slice(0, 20);
+  if (n) { WHO = n; store.set("who", n); showWho(); render(); }
+};
+async function loadFavs() {
+  const pw = store.get("chatpw"); if (!pw) return;
+  const l = await rpc("fav_list", { p_password: pw }).catch(() => null);
+  if (l) { setFavs(l); if (BUY.length) render(); }
+}
+async function toggleFav(id) {
+  const pw = store.get("chatpw") || prompt(tr("가족 비밀번호를 입력하세요"));
+  if (!pw) return;
+  if (!WHO) {
+    WHO = (prompt(tr("찜에 표시할 이름을 입력하세요 (예: 아빠, 엄마)")) || "").trim().slice(0, 20);
+    if (!WHO) return;
+    store.set("who", WHO);
+  }
+  const l = await rpc("fav_toggle", { p_password: pw, p_who: WHO, p_listing_id: id }).catch(() => null);
+  if (!l) { store.set("chatpw", ""); alert(tr("비밀번호가 맞지 않습니다. 다시 시도해 주세요.")); return; }
+  store.set("chatpw", pw); setFavs(l); showWho(); render();
+  document.querySelectorAll(`#dlg [data-fav="${id}"]`).forEach(el => el.outerHTML = favHTML(id));
+}
+function favHTML(id) {
+  const w = FAV.get(id) || [], mine = WHO && w.includes(WHO);
+  return `<span class="fav ${mine ? "on" : ""}" role="button" tabindex="0" data-fav="${id}" aria-label="찜">${mine ? "♥" : "♡"}${w.length ? `<small>${esc(w.join(", "))}</small>` : ""}</span>`;
+}
+showWho(); loadFavs();
+
 // 언어 전환: 선택을 저장하고 새로 고친다 (번역은 로드 시점에 적용된다)
 $("#lang").textContent = LANG === "ja" ? "한국어" : "日本語";
 $("#lang").onclick = () => { store.set("lang", LANG === "ja" ? "ko" : "ja"); location.reload(); };
