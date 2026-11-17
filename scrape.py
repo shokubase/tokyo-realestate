@@ -67,9 +67,9 @@ def rpc(fn: str, **params) -> dict:
 
 
 # ------------------------------------------------------------------ list API
-def api_fetch(page: Page, query: str) -> dict:
-    """사이트 페이지 컨텍스트에서 내부 목록 API를 호출한다."""
-    url = f"/_api/search/result/?search_type=buy&sort_key=_created_at&per_page={PER_PAGE}&{query}"
+def api_fetch(page: Page, query: str, deal: str = "buy") -> dict:
+    """사이트 페이지 컨텍스트에서 내부 목록 API를 호출한다. deal = buy | rent"""
+    url = f"/_api/search/result/?search_type={deal}&sort_key=_created_at&per_page={PER_PAGE}&{query}"
     for attempt in range(3):
         try:
             data = page.evaluate("u => fetch(u).then(r => r.json())", url)
@@ -84,13 +84,13 @@ def api_fetch(page: Page, query: str) -> dict:
     raise AssertionError
 
 
-def fetch_all_buildings(page: Page, query: str) -> list[dict]:
-    first = api_fetch(page, f"{query}&page=1")
+def fetch_all_buildings(page: Page, query: str, deal: str = "buy") -> list[dict]:
+    first = api_fetch(page, f"{query}&page=1", deal)
     buildings = list(first.get("buildings") or [])
     pages = math.ceil((first.get("bldg_count") or 0) / PER_PAGE)
     for n in range(2, pages + 1):
         time.sleep(DELAY_SEC)
-        buildings += api_fetch(page, f"{query}&page={n}").get("buildings") or []
+        buildings += api_fetch(page, f"{query}&page={n}", deal).get("buildings") or []
     return buildings
 
 
@@ -117,7 +117,8 @@ def parse_address(addr: str) -> dict:
     }
 
 
-def normalize(buildings: list[dict]) -> list[dict]:
+def normalize(buildings: list[dict], deal: str = "buy") -> list[dict]:
+    """deal='rent' 이면 price_man 은 월 임대료(万円)다 (API는 엔 단위로 준다)."""
     out = []
     for b in buildings:
         units = []
@@ -130,21 +131,25 @@ def normalize(buildings: list[dict]) -> list[dict]:
             floor = num(p.get("floor"))
             admin = num(p.get("admin_cost"))
             y = num(p.get("yield"))
+            price, sqm = num(p.get("price")), num(p.get("footprint"))
+            if deal == "rent" and price is not None:
+                price = round(price / 10000, 2)
+            tsubo = num(p.get("footprint_t")) or (round(sqm / 3.305785, 2) if sqm else None)
             units.append({
                 "prop_code": p["code"],
                 "wing": p.get("building_no") or None,
                 "room_no": p.get("room") or None,
                 "floor": int(floor) if floor is not None else None,
                 "layout": p.get("layout") or None,
-                "area_sqm": num(p.get("footprint")),
-                "area_tsubo": num(p.get("footprint_t")),
-                "price_man": num(p.get("price")),
+                "area_sqm": sqm,
+                "area_tsubo": tsubo,
+                "price_man": price,
                 "admin_fee_yen": int(admin) if admin is not None else None,
                 "yield_pct": y if y else None,
                 "usage": ",".join(p.get("office_usefor") or []) or None,
                 "labels": p.get("labels") or [],
                 "icons": p.get("addition_icons") or [],
-                "pending": p.get("pending"),
+                "pending": p.get("pending") or None,
                 "url": p.get("url"),
                 "layout_image": p.get("layout_image") or None,
                 "images": images,
@@ -291,15 +296,16 @@ AREAS_JS = r"""
 """
 
 
-def scrape_areas(page: Page) -> int:
+def scrape_areas(page: Page, deal: str = "buy") -> int:
     page.goto(BASE + "/housing/buy/search/area/", wait_until="domcontentloaded")
     areas = page.evaluate(AREAS_JS)
-    log(f"에리어 {len(areas)}개 소속 갱신")
+    log(f"에리어 {len(areas)}개 소속 갱신 ({deal})")
     for a in areas:
         time.sleep(DELAY_SEC)
-        blds = fetch_all_buildings(page, f"search_by=area&areas={a['code']}")
+        blds = fetch_all_buildings(page, f"search_by=area&areas={a['code']}", deal)
         a["bldg_codes"] = [b["bldg_code"] for b in blds]
-    return rpc("ingest_areas", p_areas=areas)["links_added"]
+    source = SOURCE if deal == "buy" else f"{SOURCE}-rent"
+    return rpc("ingest_areas", p_source=source, p_areas=areas)["links_added"]
 
 
 # ------------------------------------------------------------------ main
@@ -313,11 +319,13 @@ def block_heavy(route):
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--ward", action="append", help="구 코드 (기본 12=港区). 여러 번 지정 가능")
+    ap.add_argument("--deal", choices=["buy", "rent", "both"], default="both", help="매매/임대")
     ap.add_argument("--areas", action="store_true", help="에리어 소속을 강제 갱신")
     ap.add_argument("--max-details", type=int, default=2000)
     ap.add_argument("--headed", action="store_true")
     args = ap.parse_args()
     wards = args.ward or ["12"]
+    deals = ["buy", "rent"] if args.deal == "both" else [args.deal]
 
     load_env()
     run_date = datetime.now(ZoneInfo("Asia/Tokyo")).date().isoformat()
@@ -329,20 +337,28 @@ def main() -> int:
         page = ctx.new_page()
         page.goto(BASE + "/housing/buy/", wait_until="domcontentloaded")
 
-        any_new, todo = False, []
+        new_deals, todo = set(), []
         for ward in wards:
-            raw = fetch_all_buildings(page, f"search_by=district&districts={ward}")
-            payload = normalize(raw)
-            n_units = sum(len(b["units"]) for b in payload)
-            log(f"ward {ward}: 건물 {len(payload)}동 / 매물 {n_units}건 수집")
-            res = rpc("ingest_listings", p_ward_code=ward, p_run_date=run_date, p_buildings=payload)
-            need = res.pop("need_detail")
-            log(f"ward {ward}: {res} / 상세 필요 {len(need)}건")
-            any_new = any_new or res["new"] > 0
-            todo += need
+            for deal in deals:
+                raw = fetch_all_buildings(page, f"search_by=district&districts={ward}", deal)
+                payload = normalize(raw, deal)
+                n_units = sum(len(b["units"]) for b in payload)
+                log(f"ward {ward} {deal}: 건물 {len(payload)}동 / 매물 {n_units}건 수집")
+                res = rpc("ingest_listings", p_source=SOURCE if deal == "buy" else f"{SOURCE}-rent",
+                          p_ward_code=ward, p_run_date=run_date, p_buildings=payload)
+                need = res.pop("need_detail")
+                if res["new"] > 0:
+                    new_deals.add(deal)
+                if deal == "buy":       # 임대는 목록 정보만 쓴다 (상세 페이지 방문 안 함)
+                    log(f"ward {ward} {deal}: {res} / 상세 필요 {len(need)}건")
+                    todo += need
+                else:
+                    log(f"ward {ward} {deal}: {res}")
+                time.sleep(DELAY_SEC)
 
-        if any_new or args.areas:
-            log(f"에리어 연결 추가 {scrape_areas(page)}건")
+        for deal in deals:
+            if deal in new_deals or args.areas:
+                log(f"에리어 연결 추가 {scrape_areas(page, deal)}건 ({deal})")
 
         todo = todo[: args.max_details]
         if todo:
