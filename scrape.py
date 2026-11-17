@@ -302,7 +302,11 @@ def scrape_areas(page: Page, deal: str = "buy") -> int:
     log(f"에리어 {len(areas)}개 소속 갱신 ({deal})")
     for a in areas:
         time.sleep(DELAY_SEC)
-        blds = fetch_all_buildings(page, f"search_by=area&areas={a['code']}", deal)
+        try:
+            blds = fetch_all_buildings(page, f"search_by=area&areas={a['code']}", deal)
+        except Exception as e:  # noqa: BLE001  일부 에리어는 임대 검색에서 빈 응답을 준다
+            log(f"  ! 에리어 {a['code']} {a['name']} 건너뜀: {str(e).splitlines()[0][:80]}")
+            blds = []
         a["bldg_codes"] = [b["bldg_code"] for b in blds]
     source = SOURCE if deal == "buy" else f"{SOURCE}-rent"
     return rpc("ingest_areas", p_source=source, p_areas=areas)["links_added"]

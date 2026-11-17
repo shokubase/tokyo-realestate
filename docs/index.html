@@ -557,6 +557,10 @@ async function openDetail(id) {
       ${d.lat && d.lng ? `<a class="sec" href="https://www.google.com/maps/search/?api=1&query=${d.lat},${d.lng}" target="_blank" rel="noopener noreferrer">지도에서 보기</a>` : ""}
     </div>
 
+    <h3>같은 건물의 ${isRent ? "매매" : "임대"} 매물 (${cross.length}건)</h3>
+    ${cross.length ? `<div class="wrapx"><table class="rows">${sibHead}${sibRows(cross, -1)}</table></div>`
+      : `<p class="cmeta">이 건물에는 지금 게재 중인 ${isRent ? "매매" : "임대"} 매물이 없습니다.</p>`}
+
     <h3>매물</h3>
     <table class="spec">
       ${row("평단가", tsuboTxt(d).replace("평당 ", "") + (tsuboTxt(d) ? " / 坪" : ""))}
@@ -600,10 +604,6 @@ async function openDetail(id) {
 
     <h3>같은 건물의 ${isRent ? "임대" : "매매"} 매물 (${sibs.length}건${sibs.some(s => !s.is_active) ? ", 종료 포함" : ""})</h3>
     <div class="wrapx"><table class="rows">${sibHead}${sibRows(sibs, d.id)}</table></div>
-
-    <h3>같은 건물의 ${isRent ? "매매" : "임대"} 매물 (${cross.length}건)</h3>
-    ${cross.length ? `<div class="wrapx"><table class="rows">${sibHead}${sibRows(cross, -1)}</table></div>`
-      : `<p class="cmeta">지금 게재 중인 ${isRent ? "매매" : "임대"} 매물이 없습니다.</p>`}
   </div>`;
 }
 
