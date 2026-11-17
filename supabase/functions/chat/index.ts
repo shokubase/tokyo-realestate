@@ -46,15 +46,21 @@ async function sb(path: string) {
 }
 
 // 지역 목록은 워커가 살아 있는 동안 한 번만 읽는다
-let places: Promise<string> | null = null;
-function loadPlaces(): Promise<string> {
+type Places = { text: string; areas: Set<string>; towns: Set<string> };
+let places: Promise<Places> | null = null;
+function loadPlaces(): Promise<Places> {
   places ??= (async () => {
     const [areas, blds] = await Promise.all([
       sb("areas?select=code,name&source=eq.kencorp&order=code"),
       sb("buildings?select=town,ward&limit=5000"),
     ]);
-    const towns = [...new Set(blds.filter((b: { town: string }) => b.town).map((b: { town: string; ward: string }) => `${b.town}(${b.ward})`))];
-    return `세부 지역 (code = 이름):\n${areas.map((a: { code: string; name: string }) => `${a.code} = ${a.name}`).join("\n")}\n\n동네(町):\n${towns.join(", ")}`;
+    const withTown = blds.filter((b: { town: string }) => b.town);
+    const labels = [...new Set(withTown.map((b: { town: string; ward: string }) => `${b.town}(${b.ward})`))];
+    return {
+      text: `세부 지역 (code = 이름):\n${areas.map((a: { code: string; name: string }) => `${a.code} = ${a.name}`).join("\n")}\n\n동네(町):\n${labels.join(", ")}`,
+      areas: new Set<string>(areas.map((a: { code: string }) => a.code)),
+      towns: new Set<string>(withTown.map((b: { town: string }) => b.town)),
+    };
   })().catch((e) => { places = null; throw e; });
   return places;
 }
@@ -64,8 +70,9 @@ const SYSTEM = (placeText: string) => `너는 도쿄 주거용 부동산 매물 
 
 ## 지역
 질문의 지역명(한글 발음, 일본어, 영문 모두 가능)을 아래 목록에서 찾아 넣는다.
-- 동네(町) 단위로 특정되면 towns 에 일본어 이름만 넣는다 (괄호 안의 구 이름은 빼고). 예: "히로오" → 広尾, "미나미아자부" → 南麻布.
+- 동네(町) 단위로 특정되면 towns 에 일본어 이름만 넣는다 (괄호 안의 구 이름은 빼고). 예: "미나미아자부" → 南麻布. towns 에는 아래 동네 목록에 실제로 있는 이름만 넣을 수 있다.
 - "아자부 일대", "롯폰기 쪽"처럼 넓게 말하면 areas 에 세부 지역 code 를 넣는다.
+- 말한 동네가 동네 목록에는 없지만 세부 지역 이름에 들어 있으면(예: "히로오" → 麻布・広尾) 그 세부 지역 code 를 areas 에 넣고, reply 에서 그 동네만 따로 고를 수 없어 해당 세부 지역 전체로 검색한다고 알린다.
 - 동네 이름이 여러 동네의 앞부분이면(예: "아자부" → 南麻布, 元麻布, 西麻布, 東麻布, 麻布十番, 麻布台 …) 해당하는 동네를 모두 넣는다.
 - 목록에 없는 지역이면 비워 두고 reply 에서 그 지역 데이터가 없다고 알린다. 지역을 말하지 않았으면 둘 다 빈 배열.
 
@@ -74,10 +81,11 @@ ${placeText}
 ## 단위와 해석
 - 가격: 매매는 억 엔, 임대는 월 만 엔 단위 숫자. "3억 이하" → price_max 3. "월세 50만 이하" → price_max 50.
 - 금액은 모두 엔이다. 원화로 말하면 환산하지 말고 숫자를 엔으로 간주하되 reply 에서 엔 기준이라고 알린다.
-- 면적: ㎡. "80㎡ 근방/정도/쯤" → area_min 70, area_max 90 (±10㎡). "80㎡ 이상" → area_min 80. 평으로 말하면 1평 = 3.3058㎡ 로 환산.
+- 면적: ㎡. "평방미터", "제곱미터", "m2", "㎡"는 모두 ㎡이고 평이 아니다. "80㎡ 근방/정도/쯤" 또는 그냥 "80㎡" → area_min 70, area_max 90 (±10㎡). "80㎡ 이상" → area_min 80. "25평"처럼 평으로만 말했을 때만 1평 = 3.3058㎡ 로 환산한다.
 - "평당 가격이 싼" → sort tsubo_asc. "비싼 순" → price_desc. 특별한 말이 없으면 sort 는 new.
-- 수익률은 매매 매물의 예상 표면 수익률(같은 건물·동네의 임대료 기준, %)이다. "수익률 3% 이상" → deal buy, yield_min 3, sort yield_desc. "수익률 높은" → yield_desc.
-- "매물 가격 대비 월세가 싼 곳"은 수익률이 낮다는 뜻이다 → deal buy, sort yield_asc.
+- 수익률은 매매 매물의 예상 표면 수익률(같은 건물의 임대 매물 기준, %)이다. "수익률 3% 이상" → deal buy, yield_min 3, sort yield_desc. "수익률 높은" → yield_desc.
+- "매물 가격 대비 월세가 싼 곳"은 매매가에 비해 월세가 낮다, 즉 수익률이 낮다는 뜻이다 → deal buy, sort yield_asc. reply 에서는 "매매가에 비해 월세가 낮은(수익률이 낮은) 순"이라고 말한다.
+- 수익률 조건이나 수익률 정렬을 쓰면, 같은 건물에 임대 매물이 있는 매매 매물만 수익률 값이 있어 그 범위에서 찾는다고 reply 에서 알린다.
 - "월세", "임대", "렌트"를 찾으면 deal rent. 그 외에는 buy.
 - 조건에 없는 값은 null 또는 빈 배열로 둔다. 추측으로 조건을 더하지 않는다.
 
@@ -106,17 +114,22 @@ Deno.serve(async (req: Request) => {
 
   try {
     const client = new Anthropic();
+    const known = await loadPlaces();
     const response = await client.messages.parse({
       model: MODEL,
       max_tokens: 16000,
       output_config: { effort: "low", format: zodOutputFormat(Query) },
-      system: SYSTEM(await loadPlaces()),
+      system: SYSTEM(known.text),
       messages: [{ role: "user", content: question }],
     });
     if (response.stop_reason === "refusal" || !response.parsed_output) {
       return json({ error: "no_answer" }, 502);
     }
-    return json({ query: response.parsed_output, model: response.model, usage: response.usage });
+    // 목록에 없는 지역은 버린다 (없는 동네로 걸러 결과가 0건이 되는 것을 막는다)
+    const query = response.parsed_output;
+    query.areas = query.areas.filter((c) => known.areas.has(c));
+    query.towns = query.towns.filter((t) => known.towns.has(t));
+    return json({ query, model: response.model, usage: response.usage });
   } catch (e) {
     if (e instanceof Anthropic.AuthenticationError) return json({ error: "bad_api_key" }, 503);
     if (e instanceof Anthropic.RateLimitError) return json({ error: "busy" }, 429);
