@@ -27,7 +27,8 @@ QUESTIONS = [
 def ask(q: str) -> dict:
     req = urllib.request.Request(
         ENV["SUPABASE_URL"] + "/functions/v1/chat",
-        data=json.dumps({"password": ENV["CHAT_PASSWORD"], "question": q}).encode(),
+        data=json.dumps({"password": ENV["CHAT_PASSWORD"], "question": q.removeprefix("ja:"),
+                         "lang": "ja" if q.startswith("ja:") else "ko"}).encode(),   # "ja:" 로 시작하면 일본어 모드
         headers={"Content-Type": "application/json"},
     )
     t = time.time()

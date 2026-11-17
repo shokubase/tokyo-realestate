@@ -37,7 +37,7 @@ const Query = z.object({
     "area_desc", "year_desc", "yield_desc", "yield_asc",
   ]),
   limit: z.number().nullable().describe("상위 N건만 원할 때"),
-  reply: z.string().describe("적용한 조건을 한국어 한두 문장으로 설명"),
+  reply: z.string().describe("적용한 조건을 한두 문장으로 설명 (지시된 언어로)"),
 });
 
 async function sb(path: string) {
@@ -72,8 +72,8 @@ function loadPlaces(): Promise<Places> {
   return places;
 }
 
-const SYSTEM = (placeText: string) => `너는 도쿄 주거용 부동산 매물 검색 페이지의 검색 조건 변환기다.
-가족이 한국어로 묻는 질문을 검색 조건으로 바꾼다. 매물 데이터는 네가 볼 수 없고, 네가 만든 조건으로 페이지가 검색한다.
+const SYSTEM = (placeText: string, lang: "ko" | "ja") => `너는 도쿄 주거용 부동산 매물 검색 페이지의 검색 조건 변환기다.
+가족이 한국어나 일본어로 묻는 질문을 검색 조건으로 바꾼다. 매물 데이터는 네가 볼 수 없고, 네가 만든 조건으로 페이지가 검색한다.
 
 ## 지역
 질문의 지역명(한글 발음, 일본어, 영문 모두 가능)을 아래 목록에서 찾아 넣는다.
@@ -99,14 +99,15 @@ ${placeText}
 - 조건에 없는 값은 null 또는 빈 배열로 둔다. 추측으로 조건을 더하지 않는다.
 
 ## reply
-적용한 조건을 한국어 한두 문장으로 짧게 말한다. 매물을 추천하거나 투자 판단을 하지 않는다.
+reply 는 반드시 ${lang === "ja" ? "일본어(です・ます체)" : "한국어"}로 쓴다. 질문이 어떤 언어로 왔든 마찬가지다.
+적용한 조건을 한두 문장으로 짧게 말한다. 매물을 추천하거나 투자 판단을 하지 않는다.
 매물 검색이 아닌 질문이면 understood 를 false 로 하고 reply 에서 어떤 식으로 물으면 되는지 예를 하나 든다.`;
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
   if (req.method !== "POST") return json({ error: "method" }, 405);
 
-  let body: { password?: string; question?: string };
+  let body: { password?: string; question?: string; lang?: string };
   try { body = await req.json(); } catch { return json({ error: "bad_request" }, 400); }
   const question = (body.question ?? "").trim();
   if (!question || question.length > 500) return json({ error: "bad_request" }, 400);
@@ -129,7 +130,7 @@ Deno.serve(async (req: Request) => {
       max_tokens: 16000,
       // low 에서는 한글 지명 → 한자 동네 대조가 들쭉날쭉했다 (히로오 → 広尾 를 놓침)
       output_config: { effort: "medium", format: zodOutputFormat(Query) },
-      system: SYSTEM(known.text),
+      system: SYSTEM(known.text, body.lang === "ja" ? "ja" : "ko"),
       messages: [{ role: "user", content: question }],
     });
     if (response.stop_reason === "refusal" || !response.parsed_output) {

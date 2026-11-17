@@ -28,7 +28,10 @@
   --new: #f0b35a; --chip: #2a2a27; --shadow: 0 1px 2px rgba(0,0,0,.4);
 }
 .hrow { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-#theme { border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 6px 12px; cursor: pointer; font-size: 13px; white-space: nowrap; }
+.hbtns { display: flex; gap: 6px; }
+html[lang="ja"] .filters summary::after { content: "開く ▾"; }
+html[lang="ja"] .filters[open] summary::after { content: "閉じる ▴"; }
+#theme, #lang { border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 6px 12px; cursor: pointer; font-size: 13px; white-space: nowrap; }
 .tabs { display: flex; gap: 4px; margin: 14px 0 0; border-bottom: 1px solid var(--line); }
 .tabs button { border: 0; background: none; padding: 9px 14px; cursor: pointer; font-weight: 600; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
 .tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
@@ -201,7 +204,7 @@ footer { text-align: center; color: var(--muted); font-size: 12px; padding: 0 16
 </head>
 <body>
 <header class="top">
-  <div class="hrow"><h1>도쿄 매물 트래커</h1><button id="theme" type="button"></button></div>
+  <div class="hrow"><h1>도쿄 매물 트래커</h1><div class="hbtns"><button id="lang" type="button"></button><button id="theme" type="button"></button></div></div>
   <p id="status">불러오는 중…</p>
   <p>금액은 모두 일본 엔(원화 아님)이고 판매자가 부른 호가입니다. 1억 엔 = 100,000,000엔 · 평당 = 1평(坪, 약 3.3㎡)당 가격</p>
   <p>예상 수익률 = 같은 건물 임대 매물의 ㎡당 월 임대료 중앙값 × 이 매물의 면적 × 12개월 ÷ 매매가. 관리비·세금·공실을 빼지 않은 표면 수익률이고, 같은 건물에 임대 매물이 있을 때만 계산됩니다.</p>
@@ -313,8 +316,47 @@ footer { text-align: center; color: var(--muted); font-size: 12px; padding: 0 16
 
 <dialog id="dlg"><div id="dlgc"></div></dialog>
 
+<script src="ja.js"></script>
 <script>
-const SB_URL = "https://njgdwqkdyszyeyngaxai.supabase.co";
+// ---------------------------------------------------------------- 언어 (한국어 / 日本語)
+// 화면 문구는 한국어로 쓰여 있고, 일본어 모드에서는 ja.js 의 사전으로 화면 글자를 바꾼다.
+let LANG = "ko";
+try { if (localStorage.getItem("lang") === "ja") LANG = "ja"; } catch {}
+const LOCALE = LANG === "ja" ? "ja-JP" : "ko-KR";
+const HANGUL = /[가-힣]/;
+const JA_KEYS = Object.keys(window.JA || {}).sort((a, b) => b.length - a.length);
+function tr(s) {
+  if (LANG !== "ja" || !s || !HANGUL.test(s)) return s;
+  for (const [re, to] of window.JA_RX) s = s.replace(re, to);
+  for (const k of JA_KEYS) {
+    if (!HANGUL.test(s)) break;
+    if (s.includes(k)) s = s.split(k).join(window.JA[k]);
+  }
+  return s;
+}
+function trTree(root) {
+  if (root.nodeType === 3) { const v = tr(root.nodeValue); if (v !== root.nodeValue) root.nodeValue = v; return; }
+  if (root.nodeType !== 1 || root.tagName === "SCRIPT" || root.tagName === "STYLE") return;
+  for (const el of [root, ...root.querySelectorAll("[placeholder],[aria-label]")])
+    for (const a of ["placeholder", "aria-label"])
+      if (el.hasAttribute && el.hasAttribute(a)) { const v = tr(el.getAttribute(a)); if (v !== el.getAttribute(a)) el.setAttribute(a, v); }
+  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode: n => /^(SCRIPT|STYLE)$/.test(n.parentNode.tagName) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
+  for (let n; (n = w.nextNode());) { const v = tr(n.nodeValue); if (v !== n.nodeValue) n.nodeValue = v; }
+}
+if (LANG === "ja") {
+  document.documentElement.lang = "ja";
+  document.title = tr(document.title);
+  trTree(document.body);
+  new MutationObserver(ms => {
+    for (const m of ms) {
+      if (m.type === "characterData") trTree(m.target);
+      else m.addedNodes.forEach(trTree);
+    }
+  }).observe(document.body, { childList: true, subtree: true, characterData: true });
+}
+
+const SB_URL ="https://njgdwqkdyszyeyngaxai.supabase.co";
 const SB_KEY = "sb_publishable_u0298GNaBKRVjKStW0VacQ_kvpMvAdv";
 const SITE = "https://www.kencorp.co.jp";
 const PAGE = 60;
@@ -382,7 +424,7 @@ const KO = {
   "西早稲田":"니시와세다","高田馬場":"다카다노바바",
 };
 function ko(name) {
-  if (!name) return "";
+  if (!name || LANG === "ja") return "";            // 일본어 모드에서는 한글 읽기를 붙이지 않는다
   const parts = String(name).split("・");
   if (!parts.some(p => KO[p])) return "";
   return parts.map(p => KO[p] || p).join("·");
@@ -437,9 +479,12 @@ function delta(r) {
   const d = Number(r.price_man) - Number(r.initial_price_man);
   if (!d) return "";
   const pct = (d / Number(r.initial_price_man) * 100).toFixed(1);
-  const amt = r.deal_type === "rent" ? rentMan(Math.abs(d)) : man(Math.abs(d));
-  return `<span class="delta ${d < 0 ? "down" : "up"}">${d < 0 ? "▼" : "▲"} ${amt} (${pct}%)</span>`;
+  const fmt = v => r.deal_type === "rent" ? rentMan(v) : man(v);
+  return `<span class="delta ${d < 0 ? "down" : "up"}">첫 확인가 ${fmt(r.initial_price_man)} → ${d < 0 ? "▼" : "▲"} ${fmt(Math.abs(d))} ${d < 0 ? "하락" : "상승"} (${d > 0 ? "+" : ""}${pct}%)</span>`;
 }
+// 사이트가 "가격 개정"이라고 표시했지만 우리가 추적하기 전에 바뀐 경우: 이전 가격을 알 수 없다
+const revisedUnknown = r => r.is_price_changed && !delta(r)
+  ? `<span class="cmeta">가격 개정 표시 · 이전 가격은 추적 시작 전이라 알 수 없음</span>` : "";
 
 // ---------------------------------------------------------------- state
 let ALL = [], BUY = [], RENT = [], TX = null, shown = PAGE;   // ALL = 지금 보는 쪽(매매 또는 임대)
@@ -603,7 +648,7 @@ function cardHTML(r) {
       <div class="cname">${esc(r.bldg_name)}</div>
       <div class="cmeta">${esc(where(r))}${koSpan(r.town)} · ${esc(unitLine(r))}</div>
       <div class="price">${money(r)}${tsuboTxt(r) ? `<small>${tsuboTxt(r)}</small>` : ""}</div>
-      ${delta(r)}
+      ${delta(r)}${revisedUnknown(r)}
       ${r.is_active ? "" : `<div class="cmeta">게재 종료 ${esc(r.delisted_on)} · 확인된 게재 기간 ${Math.max(1, Math.round((new Date(r.delisted_on) - new Date(r.first_seen)) / 864e5))}일 · 위 금액은 마지막 호가</div>`}
       <div class="cmeta">${r.completed_year ? `${r.completed_year}년 준공` : ""}${r.route_summary ? ` · ${esc(r.route_summary)}` : ""}</div>
       ${crossLines(r)}
@@ -706,14 +751,14 @@ const CHAT_ERR = {
 };
 async function ask(question) {
   if (!question) return;
-  const pw = store.get("chatpw") || prompt("가족 비밀번호를 입력하세요");
+  const pw = store.get("chatpw") || prompt(tr("가족 비밀번호를 입력하세요"));
   if (!pw) return;
   const btn = $("#chat button");
   btn.disabled = true; btn.textContent = "찾는 중…";
   try {
     const r = await fetch(`${SB_URL}/functions/v1/chat`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password: pw, question }),
+      body: JSON.stringify({ password: pw, question, lang: LANG }),
     });
     const j = await r.json();
     if (j.error) {
@@ -804,7 +849,7 @@ async function openDetail(id) {
   <div class="dbody">
     ${pics.length ? `<div class="gallery">${pics.map(p => `<figure><img loading="lazy" referrerpolicy="no-referrer" class="${p.plan ? "plan" : ""}" alt="" src="${esc(img(p.url))}"><figcaption>${esc((p.caption || "").split("※")[0])}</figcaption></figure>`).join("")}</div>` : ""}
     <div class="dprice">${money(d)}</div>
-    <div>${delta(d)} ${d.is_active ? "" : `<span class="tag">게재 종료 ${esc(d.delisted_on)}</span>`}</div>
+    <div>${delta(d)}${revisedUnknown(d)} ${d.is_active ? "" : `<span class="tag">게재 종료 ${esc(d.delisted_on)}</span>`}</div>
     <div class="links">
       <a href="${esc(SITE + d.url)}" target="_blank" rel="noopener noreferrer">원문 페이지 열기</a>
       ${d.lat && d.lng ? `<a class="sec" href="https://www.google.com/maps/search/?api=1&query=${d.lat},${d.lng}" target="_blank" rel="noopener noreferrer">지도에서 보기</a>` : ""}
@@ -1069,6 +1114,9 @@ function applyTheme(t) {
   $("#theme").onclick = () => { const n = dark ? "light" : "dark"; store.set("theme", n); applyTheme(n); };
 }
 applyTheme(store.get("theme"));
+// 언어 전환: 선택을 저장하고 새로 고친다 (번역은 로드 시점에 적용된다)
+$("#lang").textContent = LANG === "ja" ? "한국어" : "日本語";
+$("#lang").onclick = () => { store.set("lang", LANG === "ja" ? "ko" : "ja"); location.reload(); };
 
 // ---------------------------------------------------------------- boot
 if (innerWidth < 480) document.querySelector(".filters").open = false;   // 폰에서만 접어 둔다
@@ -1103,7 +1151,7 @@ if (innerWidth < 480) document.querySelector(".filters").open = false;   // 폰�
       r.area_codes = [...seen.keys()]; r.area_names = [...seen.values()];
     }
     const act = a => a.filter(r => r.is_active).length.toLocaleString();
-    const when = runs[0] ? new Date(runs[0].started_at).toLocaleString("ko-KR", { dateStyle: "medium", timeStyle: "short" }) : "-";
+    const when = runs[0] ? new Date(runs[0].started_at).toLocaleString(LOCALE, { dateStyle: "medium", timeStyle: "short" }) : "-";
     // 마지막 수집일 하루 동안 새로 잡힌 매물과 사라진 매물 (매매+임대, 그날의 모든 실행 합계)
     const day = runs.filter(x => runs[0] && x.run_date === runs[0].run_date);
     const sum = k => day.reduce((s, x) => s + (x[k] || 0), 0).toLocaleString();
