@@ -135,6 +135,22 @@ table.stat td.diff { font-weight: 600; }
 .xlines span { color: var(--down); font-weight: 700; margin-right: 6px; }
 .xlines b { margin-right: 4px; }
 .xlines .more3 { color: var(--muted); }
+#rec { margin: 4px 0 16px; padding: 14px; border-radius: 14px; border: 1px solid color-mix(in srgb, var(--new) 45%, var(--line));
+  background: color-mix(in srgb, var(--new) 7%, var(--card)); }
+#rec h2 { margin: 0 0 10px; font-size: 16px; }
+#rec h2 small { color: var(--muted); font-weight: 400; font-size: 12.5px; margin-left: 6px; }
+#rec .snote { margin: 10px 0 0; font-size: 12px; }
+.recrow { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 6px; scroll-snap-type: x proximity; }
+.reccard { flex: none; width: 250px; scroll-snap-align: start; text-align: left; padding: 0; cursor: pointer; overflow: hidden;
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px; display: flex; flex-direction: column; }
+.reccard:hover { border-color: var(--accent); }
+.reccard .thumb { aspect-ratio: 16/10; }
+.reccard .rb { padding: 9px 11px 11px; display: flex; flex-direction: column; gap: 3px; }
+.reccard .cname { font-size: 14px; }
+.reccard .price { font-size: 16px; margin-top: 2px; }
+.reccard ul { margin: 6px 0 0; padding-left: 16px; font-size: 12.5px; line-height: 1.5; }
+.reccard .warn { color: var(--up); font-size: 12px; margin-top: 4px; }
+.badge.rec { background: var(--new); }
 .dealbar { margin: 14px 0 0; }
 .chat { display: flex; gap: 8px; margin: 12px 0 0; }
 .chat input { flex: 1; min-width: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
@@ -232,6 +248,11 @@ footer { text-align: center; color: var(--muted); font-size: 12px; padding: 0 16
   </details>
 
   <div class="scope" id="scope" hidden><span id="scopeText"></span><button id="scopeClear">전체 보기</button></div>
+  <section id="rec" hidden>
+    <h2>추천 매물 Top 5 <small>지금 고른 조건 안에서 자동 선정</small></h2>
+    <div class="recrow" id="recrow"></div>
+    <p class="snote">같은 조건·같은 평형대 매물끼리 평단가, 예상 수익률, 가격 인하, 신착, 준공 연도를 점수로 매겨 고른 것입니다(건물당 1건). 싼 데는 이유가 있을 수 있으니 상세와 원문을 꼭 확인하세요.</p>
+  </section>
   <div class="bar">
     <div class="count" id="count"></div>
     <div style="display:flex;gap:8px">
@@ -270,7 +291,7 @@ const LIST_COLS = [
   "total_units","floors_above","route_summary","is_new","is_price_changed","is_active",
   "first_seen","delisted_on","bldg_active_listings","bldg_total_listings","has_other_listing_in_bldg",
   "same_unit_listings","initial_price_man","price_changes","last_price_change_on","lat","lng",
-  "deal_type","bldg_rent_listings","bldg_rent_per_sqm_man","est_gross_yield_pct",
+  "land_right","deal_type","bldg_rent_listings","bldg_rent_per_sqm_man","est_gross_yield_pct",
   "layout_image","thumb:images->0->>url"
 ].join(",");
 // 실내 사진이 없는 매물이 절반쯤 된다 → 건물 외관 사진, 그것도 없으면 평면도로 대체
@@ -529,8 +550,70 @@ function cardHTML(r) {
     </div></button>`;
 }
 
+// ---------------------------------------------------------------- 추천
+// 지역을 골랐을 때, 그 조건 안의 매물끼리 비교해 눈에 띄는 5건을 고른다 (AI 아님, 규칙 기반).
+function recommend(rows) {
+  const act = rows.filter(r => r.is_active && r.price_per_tsubo_man > 0 && r.area_sqm > 0);
+  if (act.length < 6) return [];
+  const rent = st.deal === "rent";
+  const band = r => BANDS.findIndex(([lo, hi]) => r.area_sqm >= lo && r.area_sqm < hi);
+  const med = a => { a = [...a].sort((x, y) => x - y); const m = a.length >> 1; return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; };
+  const byBand = new Map();
+  for (const r of act) { const b = band(r); (byBand.get(b) || byBand.set(b, []).get(b)).push(+r.price_per_tsubo_man); }
+  const bandMed = new Map([...byBand].filter(([, a]) => a.length >= 3).map(([b, a]) => [b, med(a)]));
+  const ys = act.filter(r => r._y != null).map(r => r._y);
+  const yMed = ys.length >= 3 ? med(ys) : null;
+
+  const scored = act.map(r => {
+    let s = 0; const why = [], warn = [];
+    const m = bandMed.get(band(r));
+    if (m) {
+      const d = 1 - r.price_per_tsubo_man / m;
+      s += Math.max(-30, Math.min(40, d * 100));
+      if (d >= 0.05) why.push(`같은 조건 ${BANDS[band(r)][2]} 매물의 ${rent ? "임대 " : ""}평단가 중앙값보다 ${Math.round(d * 100)}% 낮음`);
+    }
+    if (!rent && r._y != null) {
+      if (yMed != null) s += (r._y - yMed) * 8;
+      if (yMed == null || r._y >= yMed) why.push(`예상 수익률 ${dec(r._y)}% (같은 건물 임대 기준)`);
+    }
+    if (r.initial_price_man > 0 && +r.price_man < +r.initial_price_man) {
+      const c = (1 - r.price_man / r.initial_price_man) * 100;
+      s += Math.min(15, c * 1.5); why.push(`첫 확인가보다 ${dec(c)}% 인하`);
+    } else if (r.is_price_changed) { s += 3; why.push("최근 가격 개정"); }
+    if (r.is_new) { s += 3; why.push("신착"); }
+    if (r.completed_year >= 2015) { s += 4; why.push(`${r.completed_year}년 준공`); }
+    if (r.completed_year && r.completed_year <= 1981) { s -= 12; warn.push("1981년 이전 준공 (구 내진 기준)"); }
+    if (/借地|定期/.test(r.land_right || "")) { s -= 15; warn.push("차지권 (토지를 빌려 쓰는 권리)"); }
+    return { r, s, why, warn };
+  }).filter(x => x.why.length).sort((a, b) => b.s - a.s);
+
+  const out = [], seen = new Set();
+  for (const x of scored) {
+    if (seen.has(x.r.bldg_code)) continue;
+    seen.add(x.r.bldg_code); out.push(x);
+    if (out.length === 5) break;
+  }
+  return out;
+}
+function recHTML({ r, why, warn }, i) {
+  return `<button class="reccard" data-id="${r.id}">
+    <div class="thumb"><img loading="lazy" referrerpolicy="no-referrer" alt="" src="${esc(img(r.thumb || bldgPhoto(r.bldg_code)))}" data-fb="${esc(img(r.layout_image))}">
+      <div class="badges"><span class="badge rec">추천 ${i + 1}</span></div></div>
+    <div class="rb">
+      <div class="cname">${esc(r.bldg_name)}</div>
+      <div class="cmeta">${esc(where(r))}${koSpan(r.town)} · ${esc(unitLine(r))}${r.completed_year ? ` · ${r.completed_year}년 준공` : ""}</div>
+      <div class="price">${money(r)}${tsuboTxt(r) ? `<small>${tsuboTxt(r)}</small>` : ""}</div>
+      <ul>${why.slice(0, 3).map(w => `<li>${esc(w)}</li>`).join("")}</ul>
+      ${warn.length ? `<div class="warn">주의: ${esc(warn.join(", "))}</div>` : ""}
+    </div></button>`;
+}
+
 function render() {
   const rows = filtered();
+  const placed = st.areas.size || st.towns.size || $("#town").value;
+  const rec = placed && !st.bldg && !st.limit ? recommend(rows) : [];
+  $("#rec").hidden = !rec.length;
+  $("#recrow").innerHTML = rec.map(recHTML).join("");
   const bl = new Set(rows.map(r => r.bldg_code)).size;
   $("#count").innerHTML = `${rows.length.toLocaleString()}건<small>건물 ${bl.toLocaleString()}동</small>`;
   $("#aibar").hidden = !st.ai;
@@ -721,6 +804,7 @@ document.addEventListener("error", e => {
 }, true);
 
 $("#grid").addEventListener("click", e => { const c = e.target.closest(".card"); if (c) openDetail(+c.dataset.id); });
+$("#recrow").addEventListener("click", e => { const c = e.target.closest(".reccard"); if (c) openDetail(+c.dataset.id); });
 $("#dlg").addEventListener("click", e => {
   if (e.target === $("#dlg") || e.target.closest("[data-close]")) return $("#dlg").close();
   const tr = e.target.closest("tr.link"); if (tr) openDetail(+tr.dataset.id);
