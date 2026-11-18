@@ -37,7 +37,9 @@ PAGE = "https://shokubase.github.io/tokyo-realestate/"
 TSUBO = 3.305785
 BANDS = [(0, 50), (50, 70), (70, 100), (100, 150), (150, 1e9)]
 COLS = ("id,bldg_code,bldg_name,ward,town,chome,floor,layout,area_sqm,price_man,price_per_tsubo_man,"
-        "completed_year,route_summary,is_new,is_price_changed,land_right,first_seen")
+        "completed_year,route_summary,is_new,is_price_changed,land_right,first_seen,layout_image,"
+        "thumb:images->0->>url")
+SITE = "https://www.kencorp.co.jp"
 
 
 def fetch(ward: str) -> list[dict]:
@@ -61,7 +63,9 @@ def band(r: dict) -> int:
 
 
 def rank(rows: list[dict], pmin: float, pmax: float, amin: float) -> list[dict]:
-    ok = [r for r in rows if r["price_per_tsubo_man"] and r["area_sqm"] and r["town"]]
+    # 토지가 소유권인 매물만 쓴다. 차지권·지상권 매물은 원래 싸서, 후보에서도 비교 기준(중앙값)에서도 뺀다.
+    ok = [r for r in rows if r["price_per_tsubo_man"] and r["area_sqm"] and r["town"]
+          and (r["land_right"] or "").startswith("所有権")]
     for r in ok:
         for k in ("price_man", "area_sqm", "price_per_tsubo_man"):
             r[k] = float(r[k])
@@ -136,11 +140,59 @@ def message(picks, total: int, today: datetime.date, cond: str) -> str:
     return "\n".join(lines)
 
 
-def send(text: str) -> None:
+def photo(r: dict) -> str:
+    """실내 사진이 있으면 그것, 없으면 건물 사진."""
+    p = r.get("thumb") or f"/images/building/{r['bldg_code']}/{r['bldg_code']}_p1.jpg"
+    return p if p.startswith("http") else SITE + p
+
+
+def flex(picks, total: int, today: datetime.date, cond: str) -> dict:
+    """사진이 있는 카드 3장을 옆으로 넘겨 보는 메시지 (LINE Flex Message)."""
+    def txt(t, **kw):
+        return {"type": "text", "text": t, "wrap": True, **kw}
+
+    bubbles = []
+    for no, r in picks:
+        url = f"{PAGE}?id={r['id']}"
+        tags = [t for t, on in (("신착", r["is_new"]), ("가격 개정", r["is_price_changed"])) if on]
+        where = r["town"] + (f"{r['chome']}丁目" if r["chome"] else "")
+        unit = " · ".join(x for x in (f"{r['floor']}층" if r["floor"] is not None else "", r["layout"] or "",
+                                      f"{r['area_sqm']:g}㎡ ({r['area_sqm'] / TSUBO:.1f}평)") if x)
+        body = [
+            txt(f"주변보다 싼 순위 {no}위 / {total}건" + (f" · {' · '.join(tags)}" if tags else ""),
+                size="xs", color="#B45309", weight="bold"),
+            txt(r["bldg_name"], size="lg", weight="bold", margin="sm"),
+            txt(f"{where} · {unit}", size="sm", color="#6F6B63", margin="xs"),
+            {"type": "box", "layout": "baseline", "margin": "md", "contents": [
+                txt(oku(r["price_man"]), size="xl", weight="bold", flex=0, wrap=False),
+                txt(f"평당 {r['price_per_tsubo_man']:,.0f}만 엔", size="xs", color="#6F6B63", margin="md", wrap=False)]},
+            {"type": "box", "layout": "vertical", "margin": "md", "paddingAll": "8px", "cornerRadius": "8px",
+             "backgroundColor": "#E8F5EE", "contents": [
+                 txt(f"주변보다 {r['disc']:.0f}% 쌈", size="md", weight="bold", color="#1A7F4B"),
+                 txt(f"{r['basis']} 매물 {r['n']}건의 평단가 중앙값 기준", size="xxs", color="#1A7F4B")]},
+        ]
+        info = " · ".join(x for x in (f"{r['completed_year']}년 준공" if r["completed_year"] else "",
+                                      r["route_summary"] or "") if x)
+        if info:
+            body.append(txt(info, size="xs", color="#6F6B63", margin="md"))
+        if r["completed_year"] and r["completed_year"] <= 1981:
+            body.append(txt("⚠ 1981년 이전 준공 (구 내진 기준)", size="xs", color="#B3261E", margin="sm"))
+        bubbles.append({
+            "type": "bubble",
+            "hero": {"type": "image", "url": photo(r), "size": "full", "aspectRatio": "4:3", "aspectMode": "cover",
+                     "action": {"type": "uri", "uri": url}},
+            "body": {"type": "box", "layout": "vertical", "spacing": "none", "contents": body},
+            "footer": {"type": "box", "layout": "vertical", "contents": [
+                {"type": "button", "style": "primary", "color": "#1F4E79", "height": "sm",
+                 "action": {"type": "uri", "label": "상세 보기", "uri": url}}]},
+        })
+    return {"type": "flex", "altText": f"오늘의 추천 매물 3건 ({today:%m/%d}) · {cond}",
+            "contents": {"type": "carousel", "contents": bubbles}}
+
+
+def post(messages: list[dict]) -> tuple[int, str]:
     to = os.environ.get("LINE_TO")
-    body = {"messages": [{"type": "text", "text": text[:4900]}]}
-    if to:
-        body["to"] = to
+    body = {"messages": messages, **({"to": to} if to else {})}
     req = urllib.request.Request(
         f"https://api.line.me/v2/bot/message/{'push' if to else 'broadcast'}",
         data=json.dumps(body).encode(),
@@ -148,9 +200,22 @@ def send(text: str) -> None:
                  "Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=30) as r:
-            print("LINE 전송 완료:", r.status)
+            return r.status, ""
     except urllib.error.HTTPError as e:
-        sys.exit(f"LINE 전송 실패 {e.code}: {e.read().decode(errors='replace')[:300]}")
+        return e.code, e.read().decode(errors="replace")[:500]
+
+
+def send(text: str, card: dict, head: str) -> None:
+    """카드형으로 보내고, LINE 이 형식을 거부하면 글자만으로 다시 보낸다."""
+    code, err = post([{"type": "text", "text": head}, card])
+    if code == 200:
+        print("LINE 전송 완료 (카드형)")
+        return
+    print(f"카드형 전송 실패 {code}: {err} → 글자로 다시 보냅니다")
+    code, err = post([{"type": "text", "text": text[:4900]}])
+    if code != 200:
+        sys.exit(f"LINE 전송 실패 {code}: {err}")
+    print("LINE 전송 완료 (글자)")
 
 
 def main() -> None:
@@ -169,13 +234,15 @@ def main() -> None:
     if not picks:
         print("조건에 맞는 매물이 없습니다.")
         return
-    cond = f"{a.ward} · {a.price_min:g}억~{a.price_max:g}억 엔 미만 · {a.area_min:g}㎡ 이상"
+    cond = f"{a.ward} · {a.price_min:g}억~{a.price_max:g}억 엔 미만 · {a.area_min:g}㎡ 이상 · 토지 소유권"
     text = message(picks, len(ranked), today, cond)
     print(text)
     if a.send:
         if not os.environ.get("LINE_CHANNEL_ACCESS_TOKEN"):
             sys.exit("LINE_CHANNEL_ACCESS_TOKEN 이 없어 전송하지 못했습니다.")
-        send(text)
+        head = (f"🏠 오늘의 추천 매물 ({today:%m/%d})\n{cond}\n"
+                f"주변보다 5% 이상 싼 {len(ranked)}건을 싼 순으로 매일 3건씩 보냅니다. 카드를 옆으로 넘겨 보세요.")
+        send(text, flex(picks, len(ranked), today, cond), head)
 
 
 if __name__ == "__main__":
