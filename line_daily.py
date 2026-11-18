@@ -114,7 +114,7 @@ def oku(man: float) -> str:
 
 def message(picks, total: int, today: datetime.date, cond: str) -> str:
     lines = [f"🏠 오늘의 추천 매물 ({today:%m/%d})", cond, f"주변보다 5% 이상 싼 {total}건 중 순위 (매일 3건씩 차례로)"]
-    for no, r in picks:
+    for i, (no, r) in enumerate(picks):
         tags = [t for t, on in (("신착", r["is_new"]), ("가격 개정", r["is_price_changed"])) if on]
         warn = []
         if r["completed_year"] and r["completed_year"] <= 1981:
@@ -126,16 +126,19 @@ def message(picks, total: int, today: datetime.date, cond: str) -> str:
                                       f"{r['area_sqm']:g}㎡({r['area_sqm'] / TSUBO:.1f}평)") if x)
         cmp_ = (f"{r['basis']} 매물 {r['n']}건의 평단가 중앙값보다 {r['disc']:.0f}% 낮음" if r["disc"] > 0
                 else f"{r['basis']} 매물 {r['n']}건의 평단가 중앙값보다 {-r['disc']:.0f}% 높음")
-        lines += ["", f"{no}위. {r['bldg_name']}" + (f" [{', '.join(tags)}]" if tags else ""),
-                  f"{where} · {unit}",
-                  f"{oku(r['price_man'])} (평당 {r['price_per_tsubo_man']:,.0f}만 엔)",
-                  f"→ {cmp_}"]
-        if r["completed_year"] or r["route_summary"]:
-            lines.append(" · ".join(x for x in (f"{r['completed_year']}년 준공" if r["completed_year"] else "",
-                                                r["route_summary"] or "") if x))
+        lines += ["", "━━━━━━━━━━━━",
+                  f"{NUMS[i % 3]} {r['bldg_name']}" + (f" [{', '.join(tags)}]" if tags else ""),
+                  f"💴 {oku(r['price_man'])} (평당 {r['price_per_tsubo_man']:,.0f}만 엔)",
+                  f"📉 {cmp_} (싼 순위 {no}위)",
+                  f"📍 {where}",
+                  f"📐 {unit}"]
+        if r["completed_year"]:
+            lines.append(f"🏗 {r['completed_year']}년 준공")
+        if r["route_summary"]:
+            lines.append(f"🚉 {r['route_summary']}")
         if warn:
             lines.append("⚠ " + ", ".join(warn))
-        lines.append(f"{PAGE}?id={r['id']}")
+        lines.append(f"👉 {PAGE}?id={r['id']}")
     lines += ["", "호가 기준이고 싼 데는 이유가 있을 수 있습니다. 상세와 원문을 꼭 확인하세요."]
     return "\n".join(lines)
 
@@ -144,6 +147,10 @@ def photo(r: dict) -> str:
     """실내 사진이 있으면 그것, 없으면 건물 사진."""
     p = r.get("thumb") or f"/images/building/{r['bldg_code']}/{r['bldg_code']}_p1.jpg"
     return p if p.startswith("http") else SITE + p
+
+
+NUMS = ["1️⃣", "2️⃣", "3️⃣"]
+CARD_COLORS = ["#1F4E79", "#1A7F4B", "#B45309"]             # 카드마다 머리띠 색을 달리해 구분한다
 
 
 def flex(picks, total: int, today: datetime.date, cond: str) -> dict:
@@ -158,32 +165,39 @@ def flex(picks, total: int, today: datetime.date, cond: str) -> dict:
         where = r["town"] + (f"{r['chome']}丁目" if r["chome"] else "")
         unit = " · ".join(x for x in (f"{r['floor']}층" if r["floor"] is not None else "", r["layout"] or "",
                                       f"{r['area_sqm']:g}㎡ ({r['area_sqm'] / TSUBO:.1f}평)") if x)
+        i = len(bubbles)
         body = [
-            txt(f"주변보다 싼 순위 {no}위 / {total}건" + (f" · {' · '.join(tags)}" if tags else ""),
-                size="xs", color="#B45309", weight="bold"),
-            txt(r["bldg_name"], size="lg", weight="bold", margin="sm"),
-            txt(f"{where} · {unit}", size="sm", color="#6F6B63", margin="xs"),
+            txt(r["bldg_name"], size="lg", weight="bold"),
             {"type": "box", "layout": "baseline", "margin": "md", "contents": [
-                txt(oku(r["price_man"]), size="xl", weight="bold", flex=0, wrap=False),
-                txt(f"평당 {r['price_per_tsubo_man']:,.0f}만 엔", size="xs", color="#6F6B63", margin="md", wrap=False)]},
+                txt("💴 " + oku(r["price_man"]), size="xl", weight="bold", flex=0, wrap=False),
+                txt(f"평당 {r['price_per_tsubo_man']:,.0f}만", size="xs", color="#6F6B63", margin="md", wrap=False)]},
             {"type": "box", "layout": "vertical", "margin": "md", "paddingAll": "8px", "cornerRadius": "8px",
              "backgroundColor": "#E8F5EE", "contents": [
-                 txt(f"주변보다 {r['disc']:.0f}% 쌈", size="md", weight="bold", color="#1A7F4B"),
+                 txt(f"📉 주변보다 {r['disc']:.0f}% 쌈", size="md", weight="bold", color="#1A7F4B"),
                  txt(f"{r['basis']} 매물 {r['n']}건의 평단가 중앙값 기준", size="xxs", color="#1A7F4B")]},
+            {"type": "separator", "margin": "md"},
+            txt(f"📍 {where}", size="sm", margin="md"),
+            txt(f"📐 {unit}", size="sm", margin="xs"),
         ]
-        info = " · ".join(x for x in (f"{r['completed_year']}년 준공" if r["completed_year"] else "",
-                                      r["route_summary"] or "") if x)
-        if info:
-            body.append(txt(info, size="xs", color="#6F6B63", margin="md"))
-        if r["completed_year"] and r["completed_year"] <= 1981:
-            body.append(txt("⚠ 1981년 이전 준공 (구 내진 기준)", size="xs", color="#B3261E", margin="sm"))
+        if r["completed_year"]:
+            old = r["completed_year"] <= 1981
+            body.append(txt(f"🏗 {r['completed_year']}년 준공" + (" ⚠ 구 내진 기준" if old else ""), size="sm", margin="xs",
+                            color="#B3261E" if old else "#1C1B19"))
+        if r["route_summary"]:
+            body.append(txt(f"🚉 {r['route_summary']}", size="sm", margin="xs"))
         bubbles.append({
             "type": "bubble",
+            "header": {"type": "box", "layout": "horizontal", "paddingAll": "10px", "backgroundColor": CARD_COLORS[i % 3],
+                       "contents": [
+                           txt(f"{NUMS[i % 3]} 오늘의 추천" + "".join(f" · {'🆕' if t == '신착' else '🔻'}{t}" for t in tags),
+                               size="sm", weight="bold", color="#FFFFFF", wrap=False),
+                           txt(f"싼 순위 {no}위/{total}", size="xs", color="#FFFFFF", align="end", gravity="center",
+                               flex=0, wrap=False)]},
             "hero": {"type": "image", "url": photo(r), "size": "full", "aspectRatio": "4:3", "aspectMode": "cover",
                      "action": {"type": "uri", "uri": url}},
             "body": {"type": "box", "layout": "vertical", "spacing": "none", "contents": body},
             "footer": {"type": "box", "layout": "vertical", "contents": [
-                {"type": "button", "style": "primary", "color": "#1F4E79", "height": "sm",
+                {"type": "button", "style": "primary", "color": CARD_COLORS[i % 3], "height": "sm",
                  "action": {"type": "uri", "label": "상세 보기", "uri": url}}]},
         })
     return {"type": "flex", "altText": f"오늘의 추천 매물 3건 ({today:%m/%d}) · {cond}",
