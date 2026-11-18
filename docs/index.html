@@ -128,6 +128,7 @@ main { max-width: 1280px; margin: 0 auto; padding: 0 16px 60px; }
 .delta.down { color: var(--down); } .delta.up { color: var(--up); }
 .tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: auto; padding-top: 7px; }
 .tag { font-size: 11px; background: var(--chip); border-radius: 5px; padding: 2px 6px; color: var(--muted); }
+.tag.land { background: color-mix(in srgb, var(--up) 14%, transparent); color: var(--up); font-weight: 600; }
 .tag.sib { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .tag.rent { background: color-mix(in srgb, var(--down) 16%, transparent); color: var(--down); font-weight: 600; }
 table.stat tr.tx td { color: var(--muted); }
@@ -182,6 +183,8 @@ table.stat td.diff { font-weight: 600; }
   box-shadow: 0 1px 4px rgba(0,0,0,.3); cursor: pointer; }
 .lpin b i { font-style: normal; display: inline-block; background: #b45309; color: #fff; border-radius: 999px; min-width: 16px; padding: 2px 0; margin: -2px 5px -2px -4px; text-align: center; }
 .lpin b u { text-decoration: none; color: #c0392b; }
+.lpin b s { text-decoration: none; display: inline-block; background: #7b3fa0; color: #fff; border-radius: 4px; padding: 2px 3px; margin: -2px 4px -2px -3px; font-size: 11px; }
+#lmap.dots .lpin.land:not(.rec):not(.hot) b { background: #7b3fa0; }
 .lpin.new b { border-color: #b45309; }
 .lpin.down b { color: #1a7f4b; }
 .lpin.gone b { opacity: .6; }
@@ -433,7 +436,7 @@ footer { text-align: center; color: var(--muted); font-size: 12px; padding: 0 16
     <div class="splitL"><div id="grid" class="grid"></div><div id="after"></div></div>
     <aside class="splitR">
       <div id="lmap"></div>
-      <div id="lmapkey"><span><i style="background:#1f4e79"></i>매물</span><span><i style="background:#b45309"></i>신착 포함</span><span><b style="color:#1a7f4b">초록 글씨</b> 가격 인하</span><span><b style="color:#c0392b">♥</b> 찜</span></div>
+      <div id="lmapkey"><span><i style="background:#1f4e79"></i>매물</span><span><i style="background:#b45309"></i>신착 포함</span><span><b style="color:#1a7f4b">초록 글씨</b> 가격 인하</span><span><i style="background:#7b3fa0"></i>소유권 아님(借)</span><span><b style="color:#c0392b">♥</b> 찜</span></div>
       <button type="button" id="lmapback">← 목록으로</button>
       <div id="lmapsheet" hidden></div>
     </aside>
@@ -628,8 +631,19 @@ const other = () => st.deal === "buy" ? "rent" : "buy";
 const FLAGS = [
   ["new", "신착"], ["chg", "가격 변동"], ["sib", "같은 건물에 다른 매물"],
   ["both", "같은 건물에 매매·임대 둘 다"],
+  ["own", "토지 소유권만"], ["lease", "소유권 아닌 것만 (차지권 등)"],
   ["dup", "같은 호실 재등록"], ["gone", "종료된 매물 포함"], ["goneonly", "종료된 매물만 (팔렸을 가능성)"],
 ];
+
+// 토지 권리: 매매 매물 중 所有権 이 아닌 것(차지권·지상권). 토지를 빌려 쓰는 권리라 기한과 지대가 있다.
+const notOwned = r => r.deal_type !== "rent" && !!r.land_right && !/^所有権/.test(r.land_right);
+const LAND_KO = { "定期借地権": "정기차지권", "普通借地権": "보통차지권", "旧法借地権": "구법 차지권",
+                  "定期地上権": "정기지상권", "普通地上権": "보통지상권", "旧法地上権": "구법 지상권" };
+function landTxt(r) {
+  const s = r.land_right || "", kind = s.split(/\s/)[0];
+  const end = (/(\d{4})年[^年]*迄/.exec(s) || [])[1], fee = (/地代([\d,]+)円/.exec(s) || [])[1];
+  return `소유권 아님 · ${LAND_KO[kind] || kind}${end ? ` ${end}년까지` : ""}${fee ? ` · 지대 월 ${fee}엔` : ""}`;
+}
 
 const CHIPS = [];
 const syncChips = () => CHIPS.forEach(c => c.b.setAttribute("aria-pressed", c.set.has(c.key)));
@@ -738,6 +752,8 @@ function filtered() {
     if (st.flags.has("new") && !r.is_new) return false;
     if (st.flags.has("chg") && !(r.is_price_changed || r.price_changes > 0)) return false;
     if (st.flags.has("sib") && !r.has_other_listing_in_bldg) return false;
+    if (st.flags.has("own") && notOwned(r)) return false;
+    if (st.flags.has("lease") && !notOwned(r)) return false;
     if (st.flags.has("dup") && !(r.same_unit_listings > 1)) return false;
     if (st.flags.has("both") && !BY[other()].has(r.bldg_code)) return false;
     return true;
@@ -804,6 +820,7 @@ function cardHTML(r) {
       <div class="cmeta">${r.completed_year ? `${r.completed_year}년 준공` : ""}${r.route_summary ? ` · ${esc(r.route_summary)}` : ""}</div>
       ${crossLines(r)}
       <div class="tags">
+        ${notOwned(r) ? `<span class="tag land">${esc(landTxt(r))}</span>` : ""}
         ${sib > 0 ? `<span class="tag sib">같은 건물 +${sib}건</span>` : ""}
         ${crossTag(r)}
         ${r._disc >= 10 ? `<span class="tag">동네 평단가보다 ${Math.round(r._disc)}% 낮음</span>` : ""}
@@ -846,7 +863,7 @@ function recommend(rows) {
     if (r.is_new) { s += 3; why.push("신착"); }
     if (r.completed_year >= 2015) { s += 4; why.push(`${r.completed_year}년 준공`); }
     if (r.completed_year && r.completed_year <= 1981) { s -= 12; warn.push("1981년 이전 준공 (구 내진 기준)"); }
-    if (/借地|定期/.test(r.land_right || "")) { s -= 15; warn.push("차지권 (토지를 빌려 쓰는 권리)"); }
+    if (notOwned(r)) { s -= 15; warn.push("토지 소유권 아님 (토지를 빌려 쓰는 권리)"); }
     return { r, s, why, warn };
   }).filter(x => x.why.length).sort((a, b) => b.s - a.s);
 
@@ -935,6 +952,7 @@ function tipHTML(rs) {
   const r0 = rs[0], sorted = [...rs].sort((a, b) => a.price_man - b.price_man);
   return `<b class="pn">${esc(r0.bldg_name)}</b>
     <div class="pm">${esc(where(r0))}${koSpan(r0.town)}${r0.completed_year ? ` · ${r0.completed_year}년 준공` : ""}${r0.route_summary ? `<br>${esc(r0.route_summary)}` : ""}</div>
+    ${rs.some(notOwned) ? `<div class="pm" style="color:#7b3fa0;font-weight:600">${esc(landTxt(rs.find(notOwned)))}</div>` : ""}
     ${sorted.slice(0, 4).map(r => `<div class="tl">${esc(unitLine(r))}<br><b>${money(r)}</b>${tsuboTxt(r) ? ` <small>${tsuboTxt(r)}</small>` : ""}</div>`).join("")}
     ${sorted.length > 4 ? `<div class="pm">외 ${sorted.length - 4}건</div>` : ""}`;
 }
@@ -966,8 +984,8 @@ async function renderListMap(rows, rec) {
   for (const [code, rs] of g) {
     const lo = rs.reduce((a, b) => +a.price_man <= +b.price_man ? a : b), no = recNo.get(code);
     const cls = ["lpin", no ? "rec" : "", rs.some(r => r.is_new) ? "new" : "", rs.some(r => r._drop > 0) ? "down" : "",
-                 rs.every(r => !r.is_active) ? "gone" : ""].filter(Boolean).join(" ");
-    const html = `<b>${no ? `<i>${no}</i>` : ""}${rs.some(r => FAV.get(r.id)?.length) ? "<u>♥</u> " : ""}${shortPrice(lo)}${rs.length > 1 ? `~ · ${rs.length}건` : ""}</b>`;
+                 rs.every(r => !r.is_active) ? "gone" : "", rs.some(notOwned) ? "land" : ""].filter(Boolean).join(" ");
+    const html = `<b>${no ? `<i>${no}</i>` : ""}${rs.some(r => FAV.get(r.id)?.length) ? "<u>♥</u> " : ""}${rs.some(notOwned) ? "<s>借</s>" : ""}${shortPrice(lo)}${rs.length > 1 ? `~ · ${rs.length}건` : ""}</b>`;
     const m = L.marker([lo.lat, lo.lng], { icon: L.divIcon({ className: cls, html, iconSize: [0, 0] }), zIndexOffset: no ? 1000 : 0 });
     m._base = no ? 1000 : 0;
     m.on("click", () => lmapPick(code));

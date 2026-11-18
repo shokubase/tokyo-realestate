@@ -115,8 +115,8 @@ def message(picks, total: int, today: datetime.date, cond: str) -> str:
         warn = []
         if r["completed_year"] and r["completed_year"] <= 1981:
             warn.append("1981년 이전 준공(구 내진 기준)")
-        if any(k in (r["land_right"] or "") for k in ("借地", "定期")):
-            warn.append("차지권")
+        if r["land_right"] and not r["land_right"].startswith("所有権"):
+            warn.append("토지 소유권 아님 (" + r["land_right"].split()[0] + ")")
         where = r["town"] + (f"{r['chome']}丁目" if r["chome"] else "")
         unit = " · ".join(x for x in (f"{r['floor']}층" if r["floor"] is not None else "", r["layout"] or "",
                                       f"{r['area_sqm']:g}㎡({r['area_sqm'] / TSUBO:.1f}평)") if x)
