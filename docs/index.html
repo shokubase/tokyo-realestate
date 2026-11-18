@@ -162,6 +162,54 @@ table.stat td.diff { font-weight: 600; }
 .leaflet-popup-content .pm { color: #6f6b63; font-size: 12px; margin-bottom: 6px; }
 .leaflet-popup-content a { display: block; color: #1f4e79; text-decoration: none; padding: 3px 0; border-top: 1px solid #eee; }
 .leaflet-popup-content a:hover { text-decoration: underline; }
+/* 매물 탭: 목록 옆 지도 */
+.split { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-items: start; }
+.splitR { display: none; position: relative; }
+#lmap { height: 100%; border-radius: 14px; border: 1px solid var(--line); z-index: 0; background: var(--chip); }
+#lmapback, #lmapfab, #lmapsheet { display: none; }
+#lmapkey { position: absolute; left: 10px; top: 10px; margin-left: 44px; z-index: 500; display: flex; gap: 10px; flex-wrap: wrap; background: rgba(255,255,255,.92); color: #1c1b19;
+  font-size: 12px; padding: 5px 10px; border-radius: 999px; box-shadow: 0 1px 4px rgba(0,0,0,.25); pointer-events: none; }
+#lmapkey i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; }
+.card.hot { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent); }
+.lpin { background: none; border: 0; }
+.lpin b { display: inline-block; transform: translate(-50%, -50%); white-space: nowrap; background: #fff; color: #1c1b19;
+  font: 700 12px/1 system-ui, sans-serif; padding: 5px 8px; border-radius: 999px; border: 1.5px solid rgba(0,0,0,.28);
+  box-shadow: 0 1px 4px rgba(0,0,0,.3); cursor: pointer; }
+.lpin b i { font-style: normal; display: inline-block; background: #b45309; color: #fff; border-radius: 999px; min-width: 16px; padding: 2px 0; margin: -2px 5px -2px -4px; text-align: center; }
+.lpin b u { text-decoration: none; color: #c0392b; }
+.lpin.new b { border-color: #b45309; }
+.lpin.down b { color: #1a7f4b; }
+.lpin.gone b { opacity: .6; }
+.lpin.rec b { border-color: #b45309; }
+#lmap.dots .lpin:not(.rec):not(.hot) b { font-size: 0; padding: 5px; background: #1f4e79; border: 1.5px solid #fff; }
+#lmap.dots .lpin.new:not(.rec):not(.hot) b { background: #b45309; }
+.lpin.hot b { background: #1f4e79; color: #fff; border-color: #fff; transform: translate(-50%, -50%) scale(1.15); }
+.lpin.hot b u { color: #ffb4a8; }
+@media (min-width: 1000px) {
+  body.withmap .split { grid-template-columns: minmax(0, 1fr) minmax(380px, 46%); }
+  body.withmap .splitR { display: block; position: sticky; top: 10px; height: calc(100vh - 20px); }
+  body.withmap .splitL .grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+}
+@media (max-width: 999px) {
+  #lmapbtn { display: none; }
+  #lmapfab { display: block; position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 5;
+    border: 0; border-radius: 999px; padding: 12px 20px; background: var(--ink); color: var(--bg); font-weight: 700; font-size: 14px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.3); cursor: pointer; }
+  body.mapfull { overflow: hidden; }
+  body.mapfull #lmapfab { display: none; }
+  body.mapfull .splitR { display: block; position: fixed; inset: 0; z-index: 20; background: var(--bg); }
+  body.mapfull #lmap { border-radius: 0; border: 0; }
+  body.mapfull .leaflet-control-zoom { display: none; }
+  body.mapfull #lmapkey { top: auto; bottom: 30px; left: 10px; margin-left: 0; }
+  body.mapfull #lmapsheet:not([hidden]) ~ #lmapkey, body.mapfull #lmapkey:has(~ #lmapsheet:not([hidden])) { display: none; }
+  body.mapfull #lmapback { display: block; position: absolute; top: 12px; left: 12px; z-index: 1000; border: 1px solid var(--line);
+    border-radius: 999px; padding: 9px 14px; background: var(--card); color: var(--ink); font-weight: 700; box-shadow: var(--shadow); cursor: pointer; }
+  body.mapfull #lmapsheet { display: block; position: absolute; left: 10px; right: 10px; bottom: 14px; z-index: 1000; max-height: 46vh; overflow-y: auto;
+    background: #fff; color: #1c1b19; border-radius: 14px; padding: 12px 14px; box-shadow: 0 4px 20px rgba(0,0,0,.35); font-size: 14px; }
+  #lmapsheet b.pn { font-size: 15px; }
+  #lmapsheet .pm { color: #6f6b63; font-size: 12px; margin-bottom: 6px; }
+  #lmapsheet a { display: block; color: #1f4e79; text-decoration: none; padding: 9px 0; border-top: 1px solid #eee; }
+}
 .txpin { background: none; border: 0; }
 .txpin b { display: inline-block; transform: translate(-50%, -50%); white-space: nowrap; color: #fff; font: 700 12px/1 system-ui, sans-serif;
   padding: 5px 7px; border-radius: 999px; border: 1.5px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.35); cursor: pointer; }
@@ -359,6 +407,7 @@ footer { text-align: center; color: var(--muted); font-size: 12px; padding: 0 16
   <div class="bar">
     <div class="count" id="count"></div>
     <div style="display:flex;gap:8px">
+      <button type="button" id="lmapbtn">지도 숨기기</button>
       <button id="reset">조건 초기화</button>
       <label for="sort" class="sortlbl">정렬</label>
       <select id="sort" aria-label="정렬">
@@ -375,8 +424,16 @@ footer { text-align: center; color: var(--muted); font-size: 12px; padding: 0 16
       </select>
     </div>
   </div>
-  <div id="grid" class="grid"></div>
-  <div id="after"></div>
+  <div class="split">
+    <div class="splitL"><div id="grid" class="grid"></div><div id="after"></div></div>
+    <aside class="splitR">
+      <div id="lmap"></div>
+      <div id="lmapkey"><span><i style="background:#1f4e79"></i>매물</span><span><i style="background:#b45309"></i>신착 포함</span><span><b style="color:#1a7f4b">초록 글씨</b> 가격 인하</span><span><b style="color:#c0392b">♥</b> 찜</span></div>
+      <button type="button" id="lmapback">← 목록으로</button>
+      <div id="lmapsheet" hidden></div>
+    </aside>
+  </div>
+  <button type="button" id="lmapfab">지도로 보기</button>
 </section>
 </main>
 <footer>실거래가 출처: 国土交通省 不動産情報ライブラリ(不動産取引価格情報・成約価格情報)를 가공해 작성. 매물 정보의 출처와 권리는 각 게재처에 있으며, 실제 조건은 원문 페이지에서 확인하세요.</footer>
@@ -834,7 +891,91 @@ function render() {
   $("#after").innerHTML = !rows.length ? `<div class="empty">조건에 맞는 매물이 없습니다.</div>`
     : rows.length > shown ? `<button class="more" id="more">더 보기 (${(rows.length - shown).toLocaleString()}건 남음)</button>` : "";
   const m = $("#more"); if (m) m.onclick = () => { shown += PAGE; render(); };
+  if (LSEL) rows.forEach(r => { if (r.bldg_code === LSEL) $(`#grid .card[data-id="${r.id}"]`)?.classList.add("hot"); });
+  renderListMap(rows, rec);
 }
+
+// ---------------------------------------------------------------- 매물 탭 옆 지도
+// 넓은 화면: 목록 오른쪽에 지도를 고정. 좁은 화면: "지도로 보기" 버튼으로 전체 화면 지도.
+// 표시는 건물 단위이고 최저가를 적는다. 화면 안에 표시가 많으면 점으로 줄인다.
+let LMAP = null, LMAPL = null, LSIG = "", LHOT = null, LSEL = null;
+const LPIN = new Map();                                    // bldg_code → marker
+const wide = () => matchMedia("(min-width: 1000px)").matches;
+const shortPrice = r => r.deal_type === "rent" ? `${+(+r.price_man).toFixed(1)}만` : `${+(r.price_man / 10000).toFixed(2)}억`;
+function lmapDensity() {
+  const b = LMAP.getBounds(); let n = 0;
+  for (const m of LPIN.values()) if (b.contains(m.getLatLng())) n++;
+  $("#lmap").classList.toggle("dots", n > 45);
+}
+function lmapHot(code) {
+  if (LHOT === code) return;
+  const old = LPIN.get(LHOT); if (old) { old.getElement()?.classList.remove("hot"); old.setZIndexOffset(old._base); }
+  LHOT = code;
+  const m = LPIN.get(code); if (m) { m.getElement()?.classList.add("hot"); m.setZIndexOffset(2000); }
+}
+function lmapPick(code) {
+  document.querySelectorAll("#grid .card.hot").forEach(c => c.classList.remove("hot"));
+  lmapHot(code);
+  LSEL = code;
+  const all = filtered(), rows = all.filter(r => r.bldg_code === code);
+  if (!wide()) { $("#lmapsheet").innerHTML = popupHTML(rows); $("#lmapsheet").hidden = false; return; }
+  const idx = all.findIndex(r => r.bldg_code === code);
+  if (idx >= shown) { shown = Math.ceil((idx + 1) / PAGE) * PAGE; render(); }
+  const cards = rows.map(r => $(`#grid .card[data-id="${r.id}"]`)).filter(Boolean);
+  cards.forEach(c => c.classList.add("hot"));
+  cards[0]?.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+async function renderListMap(rows, rec) {
+  const off = store.get("lmap") === "0";
+  document.body.classList.toggle("withmap", !off);
+  $("#lmapbtn").textContent = off ? "지도 보기" : "지도 숨기기";
+  if ($("#tab-list").hidden || (wide() ? off : !document.body.classList.contains("mapfull"))) return;
+  try { await loadLeaflet(); } catch { return; }
+  if (!LMAP) {
+    LMAP = L.map("lmap").setView([35.663, 139.725], 13);
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      referrerPolicy: "strict-origin-when-cross-origin",
+      maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }).addTo(LMAP);
+    applyMapTone();
+    LMAPL = L.layerGroup().addTo(LMAP);
+    LMAP.on("moveend", lmapDensity);
+    LMAP.on("click", () => { $("#lmapsheet").hidden = true; });
+  }
+  LMAP.invalidateSize();
+  const recNo = new Map(rec.map((x, i) => [x.r.bldg_code, i + 1]));
+  const g = new Map();
+  for (const r of rows) if (r.lat && r.lng) (g.get(r.bldg_code) || g.set(r.bldg_code, []).get(r.bldg_code)).push(r);
+  const favs = [...g.values()].flat().filter(r => FAV.get(r.id)?.length).map(r => r.id);
+  const sig = [st.deal, [...g].map(([k, v]) => k + ":" + v.length), [...recNo.keys()], favs].join("|");
+  if (sig === LSIG) return;
+  LSIG = sig; LMAPL.clearLayers(); LPIN.clear(); LHOT = LSEL = null;
+  const pts = [];
+  for (const [code, rs] of g) {
+    const lo = rs.reduce((a, b) => +a.price_man <= +b.price_man ? a : b), no = recNo.get(code);
+    const cls = ["lpin", no ? "rec" : "", rs.some(r => r.is_new) ? "new" : "", rs.some(r => r._drop > 0) ? "down" : "",
+                 rs.every(r => !r.is_active) ? "gone" : ""].filter(Boolean).join(" ");
+    const html = `<b>${no ? `<i>${no}</i>` : ""}${rs.some(r => FAV.get(r.id)?.length) ? "<u>♥</u> " : ""}${shortPrice(lo)}${rs.length > 1 ? `~ · ${rs.length}건` : ""}</b>`;
+    const m = L.marker([lo.lat, lo.lng], { icon: L.divIcon({ className: cls, html, iconSize: [0, 0] }), zIndexOffset: no ? 1000 : 0 });
+    m._base = no ? 1000 : 0;
+    m.on("click", () => lmapPick(code));
+    m.bindTooltip(`${lo.bldg_name}${rs.length > 1 ? ` (${rs.length})` : ""}`, { direction: "top", offset: [0, -12] });
+    m.addTo(LMAPL); LPIN.set(code, m); pts.push([lo.lat, lo.lng]);
+  }
+  if (pts.length) LMAP.fitBounds(pts, { padding: [40, 40], maxZoom: 16 });
+  lmapDensity();
+}
+const rowById = id => BUY.find(r => r.id === id) || RENT.find(r => r.id === id);
+for (const sel of ["#grid", "#recrow"]) $(sel).addEventListener("mouseover", e => {
+  const c = e.target.closest("[data-id]"), r = c && rowById(+c.dataset.id);
+  if (r && LMAP) lmapHot(r.bldg_code);
+});
+$("#lmapbtn").onclick = () => { store.set("lmap", store.get("lmap") === "0" ? "1" : "0"); LSIG = ""; render(); };
+$("#lmapfab").onclick = () => { document.body.classList.add("mapfull"); LSIG = ""; render(); };
+$("#lmapback").onclick = () => { document.body.classList.remove("mapfull"); $("#lmapsheet").hidden = true; };
+$("#lmapsheet").addEventListener("click", e => {
+  const a = e.target.closest("[data-id]"); if (a) { e.preventDefault(); openDetail(+a.dataset.id); }
+});
+matchMedia("(min-width: 1000px)").addEventListener("change", () => { document.body.classList.remove("mapfull"); LSIG = ""; if (BUY.length) render(); });
 
 // ---------------------------------------------------------------- 비교 지표
 // 매물마다 "주변과 비교한 값"을 미리 계산해 둔다. AI 검색이 이 지표들을 조합해 조건을 만든다.
@@ -1224,6 +1365,8 @@ function showTab(name) {
   if (name === "stats") renderStats();
   if (name === "loan") renderLoan();
   if (name === "map") renderMap();
+  $("#lmapfab").hidden = name !== "list";
+  if (name === "list") render();
 }
 
 // ---------------------------------------------------------------- 지도
@@ -1232,8 +1375,8 @@ const LEAFLET = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/";
 let MAP = null, MAPL = null, MAPT = null, leafletP = null;
 // "배경 연하게": 지도 타일의 색을 빼서 매물 표시가 더 잘 보이게 한다 (선택 사항, 기기에 기억)
 function applyMapTone() {
-  const on = $("#maptone").checked, pane = document.querySelector("#map .leaflet-tile-pane");
-  if (pane) pane.style.filter = on ? "saturate(.3) brightness(1.06) contrast(.92)" : "";
+  const on = $("#maptone").checked;
+  document.querySelectorAll(".leaflet-tile-pane").forEach(pane => pane.style.filter = on ? "saturate(.3) brightness(1.06) contrast(.92)" : "");
 }
 function loadLeaflet() {
   return leafletP ??= new Promise((ok, fail) => {
