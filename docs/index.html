@@ -1746,6 +1746,9 @@ if (innerWidth < 480) document.querySelector(".filters").open = false;   // 폰�
     const delta = runs[0] ? ` · ${runs[0].run_date.slice(5).replace("-", "/")} 신규 +${sum("new_count")} · 종료 −${sum("delisted_count")}` : "";
     $("#status").textContent = `게재 중 매매 ${act(BUY)}건 · 임대 ${act(RENT)}건${delta} · 마지막 수집 ${when}`;
     buildFilters(); render();
+    // LINE 알림 등에서 온 링크(?id=매물번호)는 그 매물의 상세 창을 바로 연다
+    const linked = +new URLSearchParams(location.search).get("id");
+    if (linked) openDetail(linked);
   } catch (e) {
     $("#status").textContent = "데이터를 불러오지 못했습니다.";
     $("#grid").outerHTML = `<div class="empty">${esc(e.message)}</div>`;
