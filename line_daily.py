@@ -82,7 +82,8 @@ def rank(rows: list[dict], pmin: float, pmax: float, amin: float) -> list[dict]:
             continue                                   # 비교할 주변 매물이 너무 적다
         r["disc"] = (1 - r["price_per_tsubo_man"] / base) * 100
         out.append(r)
-    return sorted(out, key=lambda r: -r["disc"])
+    # 주변보다 5% 이상 싼 것만 후보로 둔다 (전부 돌리면 대부분의 날에 "주변보다 비싼" 매물이 간다)
+    return sorted((r for r in out if r["disc"] >= 5), key=lambda r: -r["disc"])
 
 
 def pick(ranked: list[dict], day: int, n: int = 3) -> list[tuple[int, dict]]:
@@ -108,7 +109,7 @@ def oku(man: float) -> str:
 
 
 def message(picks, total: int, today: datetime.date, cond: str) -> str:
-    lines = [f"🏠 오늘의 추천 매물 ({today:%m/%d})", cond, f"조건에 맞는 {total}건 중 주변보다 싼 순위"]
+    lines = [f"🏠 오늘의 추천 매물 ({today:%m/%d})", cond, f"주변보다 5% 이상 싼 {total}건 중 순위 (매일 3건씩 차례로)"]
     for no, r in picks:
         tags = [t for t, on in (("신착", r["is_new"]), ("가격 개정", r["is_price_changed"])) if on]
         warn = []
