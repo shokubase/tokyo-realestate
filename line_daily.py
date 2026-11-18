@@ -150,6 +150,8 @@ def photo(r: dict) -> str:
 
 
 NUMS = ["1️⃣", "2️⃣", "3️⃣"]
+# 한 줄에 다 안 들어가는 글자는 줄을 바꾸지 않고 글자 크기를 줄인다 → 카드 3장의 줄 위치가 항상 같다
+FIT = {"wrap": False, "adjustMode": "shrink-to-fit"}
 
 
 def flex(picks, total: int, today: datetime.date, cond: str) -> dict:
@@ -166,7 +168,7 @@ def flex(picks, total: int, today: datetime.date, cond: str) -> dict:
                                       f"{r['area_sqm']:g}㎡ ({r['area_sqm'] / TSUBO:.1f}평)") if x)
         body = [
             {"type": "box", "layout": "baseline", "spacing": "md", "contents": [
-                txt(r["bldg_name"], size="lg", weight="bold", flex=1),
+                txt(r["bldg_name"], size="lg", weight="bold", flex=1, **FIT),
                 txt(f"{no}위/{total}", size="xs", color="#8A867E", flex=0, wrap=False)]},
             *([txt(" · ".join(("🆕 " if t == "신착" else "🔻 ") + t for t in tags), size="xs", color="#B45309",
                    weight="bold", margin="xs")] if tags else []),
@@ -176,17 +178,17 @@ def flex(picks, total: int, today: datetime.date, cond: str) -> dict:
             {"type": "box", "layout": "vertical", "margin": "md", "paddingAll": "8px", "cornerRadius": "8px",
              "backgroundColor": "#E8F5EE", "contents": [
                  txt(f"📉 주변보다 {r['disc']:.0f}% 쌈", size="md", weight="bold", color="#1A7F4B"),
-                 txt(f"{r['basis']} 매물 {r['n']}건의 평단가 중앙값 기준", size="xxs", color="#1A7F4B")]},
+                 txt(f"{r['basis']} 매물 {r['n']}건의 평단가 중앙값 기준", size="xxs", color="#1A7F4B", **FIT)]},
             {"type": "separator", "margin": "md"},
-            txt(f"📍 {where}", size="sm", margin="md"),
-            txt(f"📐 {unit}", size="sm", margin="xs"),
+            txt(f"📍 {where}", size="sm", margin="md", **FIT),
+            txt(f"📐 {unit}", size="sm", margin="xs", **FIT),
         ]
         if r["completed_year"]:
             old = r["completed_year"] <= 1981
             body.append(txt(f"🏗 {r['completed_year']}년 준공" + (" ⚠ 구 내진 기준" if old else ""), size="sm", margin="xs",
                             color="#B3261E" if old else "#1C1B19"))
         if r["route_summary"]:
-            body.append(txt(f"🚉 {r['route_summary']}", size="sm", margin="xs"))
+            body.append(txt(f"🚉 {r['route_summary']}", size="sm", margin="xs", **FIT))
         bubbles.append({
             "type": "bubble",
             "hero": {"type": "image", "url": photo(r), "size": "full", "aspectRatio": "4:3", "aspectMode": "cover",
