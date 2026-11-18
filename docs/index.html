@@ -171,6 +171,11 @@ table.stat td.diff { font-weight: 600; }
   font-size: 12px; padding: 5px 10px; border-radius: 999px; box-shadow: 0 1px 4px rgba(0,0,0,.25); pointer-events: none; }
 #lmapkey i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; }
 .card.hot { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent); }
+.ltip { color: #1c1b19; font: 12.5px/1.45 inherit; padding: 9px 11px; border-radius: 10px; white-space: nowrap; }
+.ltip b.pn { font-size: 13.5px; }
+.ltip .pm { color: #6f6b63; font-size: 12px; }
+.ltip .tl { border-top: 1px solid #eee; margin-top: 5px; padding-top: 5px; }
+.ltip .tl small { color: #6f6b63; }
 .lpin { background: none; border: 0; }
 .lpin b { display: inline-block; transform: translate(-50%, -50%); white-space: nowrap; background: #fff; color: #1c1b19;
   font: 700 12px/1 system-ui, sans-serif; padding: 5px 8px; border-radius: 999px; border: 1.5px solid rgba(0,0,0,.28);
@@ -925,6 +930,14 @@ function lmapPick(code) {
   cards.forEach(c => c.classList.add("hot"));
   cards[0]?.scrollIntoView({ behavior: "smooth", block: "center" });
 }
+// 표시에 마우스를 올렸을 때: 건물명, 동네·준공 연도, 매물별 면적·가격·평단가 (싼 순으로 4건까지)
+function tipHTML(rs) {
+  const r0 = rs[0], sorted = [...rs].sort((a, b) => a.price_man - b.price_man);
+  return `<b class="pn">${esc(r0.bldg_name)}</b>
+    <div class="pm">${esc(where(r0))}${koSpan(r0.town)}${r0.completed_year ? ` · ${r0.completed_year}년 준공` : ""}${r0.route_summary ? `<br>${esc(r0.route_summary)}` : ""}</div>
+    ${sorted.slice(0, 4).map(r => `<div class="tl">${esc(unitLine(r))}<br><b>${money(r)}</b>${tsuboTxt(r) ? ` <small>${tsuboTxt(r)}</small>` : ""}</div>`).join("")}
+    ${sorted.length > 4 ? `<div class="pm">외 ${sorted.length - 4}건</div>` : ""}`;
+}
 async function renderListMap(rows, rec) {
   const off = store.get("lmap") === "0";
   document.body.classList.toggle("withmap", !off);
@@ -958,7 +971,11 @@ async function renderListMap(rows, rec) {
     const m = L.marker([lo.lat, lo.lng], { icon: L.divIcon({ className: cls, html, iconSize: [0, 0] }), zIndexOffset: no ? 1000 : 0 });
     m._base = no ? 1000 : 0;
     m.on("click", () => lmapPick(code));
-    m.bindTooltip(`${lo.bldg_name}${rs.length > 1 ? ` (${rs.length})` : ""}`, { direction: "top", offset: [0, -12] });
+    // 지도 위쪽 가장자리의 표시는 정보창을 아래로 띄운다 (위로 띄우면 잘린다)
+    m.on("mouseover", () => { const t = m.getTooltip(); if (!t) return;
+      const up = LMAP.latLngToContainerPoint(m.getLatLng()).y > 240;
+      t.options.direction = up ? "top" : "bottom"; t.options.offset = [0, up ? -12 : 12]; });
+    if (matchMedia("(hover: hover)").matches) m.bindTooltip(() => tipHTML(rs), { direction: "top", offset: [0, -12], className: "ltip", opacity: 1 });
     m.addTo(LMAPL); LPIN.set(code, m); pts.push([lo.lat, lo.lng]);
   }
   if (pts.length) LMAP.fitBounds(pts, { padding: [40, 40], maxZoom: 16 });
