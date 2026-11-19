@@ -58,6 +58,29 @@ def fetch(ward: str) -> list[dict]:
             return rows
 
 
+# 일본어 지명 → 한글 표기 (docs/index.html 의 KO 와 같은 표기). 없는 지명은 일본어만 나온다.
+KO = {
+    "港区": "미나토구", "渋谷区": "시부야구", "千代田区": "지요다구", "新宿区": "신주쿠구", "中央区": "주오구",
+    "目黒区": "메구로구", "品川区": "시나가와구", "世田谷区": "세타가야구", "文京区": "분쿄구",
+    "三田": "미타", "元赤坂": "모토아카사카", "元麻布": "모토아자부", "六本木": "롯폰기", "北青山": "기타아오야마",
+    "南青山": "미나미아오야마", "南麻布": "미나미아자부", "台場": "다이바", "愛宕": "아타고", "新橋": "신바시",
+    "東新橋": "히가시신바시", "東麻布": "히가시아자부", "浜松町": "하마마쓰초", "海岸": "가이간", "港南": "고난",
+    "白金": "시로카네", "白金台": "시로카네다이", "芝": "시바", "芝公園": "시바코엔", "芝大門": "시바다이몬",
+    "芝浦": "시바우라", "虎ノ門": "도라노몬", "西新橋": "니시신바시", "西麻布": "니시아자부", "赤坂": "아카사카",
+    "高輪": "다카나와", "麻布十番": "아자부주반", "麻布台": "아자부다이", "麻布永坂町": "아자부나가사카초",
+    "麻布狸穴町": "아자부마미아나초",
+}
+
+
+def with_ko(name: str) -> str:
+    return f"{name}({KO[name]})" if name in KO else name
+
+
+def where_txt(r: dict) -> str:
+    jp = r["town"] + (f"{r['chome']}丁目" if r["chome"] else "")
+    return f"{jp} · {KO[r['town']]}" + (f" {r['chome']}초메" if r["chome"] else "") if r["town"] in KO else jp
+
+
 def band(r: dict) -> int:
     return next(i for i, (lo, hi) in enumerate(BANDS) if lo <= r["area_sqm"] < hi)
 
@@ -121,7 +144,7 @@ def message(picks, total: int, today: datetime.date, cond: str) -> str:
             warn.append("1981년 이전 준공(구 내진 기준)")
         if r["land_right"] and not r["land_right"].startswith("所有権"):
             warn.append("토지 소유권 아님 (" + r["land_right"].split()[0] + ")")
-        where = r["town"] + (f"{r['chome']}丁目" if r["chome"] else "")
+        where = where_txt(r)
         unit = " · ".join(x for x in (f"{r['floor']}층" if r["floor"] is not None else "", r["layout"] or "",
                                       f"{r['area_sqm']:g}㎡({r['area_sqm'] / TSUBO:.1f}평)") if x)
         cmp_ = (f"{r['basis']} 매물 {r['n']}건의 평단가 중앙값보다 {r['disc']:.0f}% 낮음" if r["disc"] > 0
@@ -163,7 +186,7 @@ def flex(picks, total: int, today: datetime.date, cond: str) -> dict:
     for no, r in picks:
         url = f"{PAGE}?id={r['id']}"
         tags = [t for t, on in (("신착", r["is_new"]), ("가격 개정", r["is_price_changed"])) if on]
-        where = r["town"] + (f"{r['chome']}丁目" if r["chome"] else "")
+        where = where_txt(r)
         unit = " · ".join(x for x in (f"{r['floor']}층" if r["floor"] is not None else "", r["layout"] or "",
                                       f"{r['area_sqm']:g}㎡ ({r['area_sqm'] / TSUBO:.1f}평)") if x)
         body = [
@@ -246,7 +269,7 @@ def main() -> None:
     if not picks:
         print("조건에 맞는 매물이 없습니다.")
         return
-    cond = f"{a.ward} · {a.price_min:g}억~{a.price_max:g}억 엔 미만 · {a.area_min:g}㎡ 이상 · 토지 소유권"
+    cond = f"{with_ko(a.ward)} ·{a.price_min:g}억~{a.price_max:g}억 엔 미만 · {a.area_min:g}㎡ 이상 · 토지 소유권"
     text = message(picks, len(ranked), today, cond)
     print(text)
     if a.send:
